@@ -165,71 +165,74 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
             <p className="notice">No hay citas con el filtro seleccionado.</p>
           </div>
         ) : (
-          <div className="panel" style={{ overflowX: "auto" }}>
-            <table className="admin-table">
-              <colgroup>
-                <col />
-                <col />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "140px" }} />
-                <col style={{ width: "120px" }} />
-                <col style={{ width: "220px" }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>Servicio</th>
-                  <th>Fecha</th>
-                  <th>Hora</th>
-                  <th>Trabajador</th>
-                  <th>Estado</th>
-                  <th className="actions-cell">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAppointments.map((appt) => (
-                  <tr key={appt.id}>
-                    <td>{appt.serviceName}</td>
-                    <td>{appt.date}</td>
-                    <td>{appt.time}</td>
-                    <td>
-                      <select
-                        value={appt.worker ?? ""}
-                        onChange={(e) =>
-                          handleWorkerChange(appt.id, e.target.value || null)
-                        }
-                        className="control"
-                      >
-                        <option value="">Sin asignar</option>
-                        {workers.map((w) => (
-                          <option key={w} value={w}>
-                            {w}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className={`status-pill status-${appt.status}`}>
-                      {appt.status}
-                    </td>
-                    <td className="admin-actions actions-cell">
-                      <button
-                        type="button"
-                        className="primary-button"
-                        onClick={() => handleStatusChange(appt.id, "confirmada")}
-                      >
-                        Confirmar
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => handleStatusChange(appt.id, "cancelada")}
-                      >
-                        Cancelar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="stack" style={{ gap: "12px" }}>
+            {filteredAppointments.map((appt) => (
+              <div
+                key={appt.id}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: "14px",
+                  padding: "12px",
+                  background: "#fffdf7",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  gap: "10px 12px",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <div className="muted" style={{ fontWeight: 700 }}>Servicio</div>
+                  <div>{appt.serviceName}</div>
+                </div>
+                <div>
+                  <div className="muted" style={{ fontWeight: 700 }}>Fecha</div>
+                  <div>{appt.date}</div>
+                </div>
+                <div>
+                  <div className="muted" style={{ fontWeight: 700 }}>Hora</div>
+                  <div>{appt.time}</div>
+                </div>
+                <div>
+                  <div className="muted" style={{ fontWeight: 700 }}>Trabajador</div>
+                  <select
+                    value={appt.worker ?? ""}
+                    onChange={(e) =>
+                      handleWorkerChange(appt.id, e.target.value || null)
+                    }
+                    className="control"
+                  >
+                    <option value="">Sin asignar</option>
+                    {workers.map((w) => (
+                      <option key={w} value={w}>
+                        {w}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="muted" style={{ fontWeight: 700 }}>Estado</div>
+                  <span className={`status-pill status-${appt.status}`}>
+                    {appt.status}
+                  </span>
+                </div>
+                <div className="admin-actions" style={{ justifyContent: "flex-start" }}>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => handleStatusChange(appt.id, "confirmada")}
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => handleStatusChange(appt.id, "cancelada")}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

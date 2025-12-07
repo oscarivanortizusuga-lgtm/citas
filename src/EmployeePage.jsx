@@ -168,28 +168,35 @@ export function EmployeePage({ initialWorker = "", lockWorker = false }) {
               {filteredAppointments.length === 0 ? (
                 <p className="notice">No hay citas para este empleado en esta fecha.</p>
               ) : (
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Hora</th>
-                      <th>Servicio</th>
-                      <th>Duración</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAppointments.map((appt) => (
-                      <tr key={appt.id}>
-                        <td>{appt.time}</td>
-                        <td>{appt.serviceName}</td>
-                        <td>{appt.serviceDuration} min</td>
-                        <td className={`status-pill status-${appt.status}`}>
+                <div className="stack" style={{ gap: "12px" }}>
+                  {filteredAppointments.map((appt) => (
+                    <div
+                      key={appt.id}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1.3fr",
+                        gap: "8px 12px",
+                        border: "1px solid var(--border)",
+                        borderRadius: "14px",
+                        padding: "10px 12px",
+                        background: "#fffdf7",
+                      }}
+                    >
+                      <div className="muted" style={{ fontWeight: 700 }}>Hora</div>
+                      <div style={{ fontWeight: 700 }}>{appt.time}</div>
+                      <div className="muted" style={{ fontWeight: 700 }}>Servicio</div>
+                      <div>{appt.serviceName}</div>
+                      <div className="muted" style={{ fontWeight: 700 }}>Duración</div>
+                      <div>{appt.serviceDuration} min</div>
+                      <div className="muted" style={{ fontWeight: 700 }}>Estado</div>
+                      <div>
+                        <span className={`status-pill status-${appt.status}`}>
                           {appt.status}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
