@@ -9,21 +9,74 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
   const [newUser, setNewUser] = useState({ username: "", role: "employee", password: "" });
   const [creationError, setCreationError] = useState("");
   const [creationOk, setCreationOk] = useState("");
+  const [assignError, setAssignError] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [calendarDate, setCalendarDate] = useState(() => new Date().toISOString().split("T")[0]);
+
+  const toMinutes = (timeStr) => {
+    const [h, m] = timeStr.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const overlaps = (a, b) => {
+    const startA = toMinutes(a.time);
+    const endA = startA + (Number(a.serviceDuration) || 0);
+    const startB = toMinutes(b.time);
+    const endB = startB + (Number(b.serviceDuration) || 0);
+    return startA < endB && startB < endA;
+  };
 
   const handleWorkerChange = (id, worker) => {
+    const target = appointments.find((appt) => appt.id === id);
+    if (!target) return;
+    if (
+      worker &&
+      appointments.some(
+        (appt) =>
+          appt.id !== id &&
+          appt.worker === worker &&
+          appt.date === target.date &&
+          appt.status !== "cancelada" &&
+          overlaps(appt, target)
+      )
+    ) {
+      setAssignError(
+        `Conflicto: ${worker} ya tiene una cita asignada ese día con horario que se cruza con ${target.time}.`
+      );
+      return;
+    }
+    setAssignError("");
     updateAppointment(id, { worker });
   };
 
   const handleStatusChange = (id, status) => {
+    const target = appointments.find((appt) => appt.id === id);
+    if (!target) return;
+
+    if (status === "confirmada") {
+      if (!target.worker) {
+        setAssignError("Asigna un trabajador antes de confirmar la cita.");
+        return;
+      }
+      const conflict = appointments.some(
+        (appt) =>
+          appt.id !== id &&
+          appt.worker === target.worker &&
+          appt.date === target.date &&
+          appt.status !== "cancelada" &&
+          overlaps(appt, target)
+      );
+      if (conflict) {
+        setAssignError(
+          `Conflicto: ${target.worker} ya tiene una cita en un horario que se cruza con ${target.time} el ${target.date}.`
+        );
+        return;
+      }
+    }
+
+    setAssignError("");
     updateAppointment(id, { status });
   };
-
-  const confirmedByWorker = workers.map((name) => ({
-    name,
-    count: appointments.filter(
-      (appt) => appt.status === "confirmada" && appt.worker === name
-    ).length,
-  }));
 
   const pendingCount = appointments.filter((appt) => appt.status === "pendiente").length;
   const totalAppointments = appointments.length;
@@ -34,6 +87,41 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
 
   const employeesList = users.filter((u) => u.role === "employee");
 
+  const generateTimeSlots = () => {
+    const slots = [];
+    let hour = 9;
+    let minutes = 0;
+    while (hour < 18 || (hour === 18 && minutes === 0)) {
+      const hh = String(hour).padStart(2, "0");
+      const mm = String(minutes).padStart(2, "0");
+      slots.push(`${hh}:${mm}`);
+      minutes += 30;
+      if (minutes === 60) {
+        minutes = 0;
+        hour += 1;
+      }
+    }
+    return slots;
+  };
+
+  const timeSlots = generateTimeSlots();
+
+  const calendarData = workers.map((worker) => {
+    const appts = appointments
+      .filter(
+        (a) =>
+          a.worker === worker &&
+          a.date === calendarDate &&
+          a.status !== "cancelada"
+      )
+      .map((a) => ({
+        ...a,
+        start: toMinutes(a.time),
+        end: toMinutes(a.time) + (Number(a.serviceDuration) || 0),
+      }));
+    return { worker, appts };
+  });
+
   const handleCreateUser = (e) => {
     e.preventDefault();
     if (!onCreateUser) return;
@@ -42,6 +130,7 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
       setCreationError("");
       setCreationOk("Usuario creado correctamente");
       setNewUser({ username: "", role: "employee", password: "" });
+      setShowCreateModal(false);
     } else {
       setCreationOk("");
       setCreationError(result.error || "No se pudo crear el usuario");
@@ -58,11 +147,16 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
               <p className="lede">Gestiona citas, asigna personal y crea usuarios.</p>
               <p className="helper">Tema Magic Beauty, estados y duraciones intactos.</p>
             </div>
-            {onLogout ? (
-              <button className="ghost-button" onClick={onLogout}>
-                Cerrar sesión
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button className="primary-button" type="button" onClick={() => setShowCreateModal(true)}>
+                Crear usuario
               </button>
-            ) : null}
+              {onLogout ? (
+                <button className="ghost-button" onClick={onLogout}>
+                  Cerrar sesión
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="stack" style={{ flexDirection: "row", gap: "10px", flexWrap: "wrap" }}>
             <span className="badge-soft">Total: {totalAppointments}</span>
@@ -89,72 +183,73 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
           </div>
         </div>
 
-        <div className="panel admin-summary">
-          {confirmedByWorker.map(({ name, count }) => (
-            <span key={name} className="summary-chip">
-              {name}: {count} {count === 1 ? "cita" : "citas"} confirmadas
-            </span>
-          ))}
-        </div>
+        {assignError ? (
+          <div className="panel">
+            <p className="notice" style={{ color: "#7f1d1d", borderColor: "#fca5a5", background: "#fef2f2" }}>
+              {assignError}
+            </p>
+          </div>
+        ) : null}
 
-        <div className="panel" style={{ display: "grid", gap: "10px", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-          <div className="stack">
-            <h3 style={{ margin: 0 }}>Crear usuario</h3>
-            <p className="helper">Admin requiere contraseña; empleados solo usuario.</p>
-            <form onSubmit={handleCreateUser} className="stack">
-              <label className="field">
-                <span className="field-label">Usuario</span>
-                <input
-                  className="control"
-                  value={newUser.username}
-                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                  placeholder="ej. ana"
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">Rol</span>
-                <select
-                  className="control"
-                  value={newUser.role}
-                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                >
-                  <option value="employee">Empleado</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
-              {newUser.role === "admin" ? (
+        {showCreateModal ? (
+          <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="section-heading">
+                <div>
+                  <h3 style={{ margin: 0 }}>Crear usuario</h3>
+                  <p className="helper">Admin requiere contraseña; empleados solo usuario.</p>
+                </div>
+                <button className="ghost-button" type="button" onClick={() => setShowCreateModal(false)}>
+                  Cerrar
+                </button>
+              </div>
+              <form onSubmit={handleCreateUser} className="stack">
                 <label className="field">
-                  <span className="field-label">Contraseña (solo admin)</span>
+                  <span className="field-label">Usuario</span>
                   <input
                     className="control"
-                    type="password"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    placeholder="••••••••"
+                    value={newUser.username}
+                    onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                    placeholder="ej. ana"
                   />
                 </label>
-              ) : null}
-              {creationError ? <p className="muted" style={{ color: "#b91c1c" }}>{creationError}</p> : null}
-              {creationOk ? <p className="muted" style={{ color: "#15803d" }}>{creationOk}</p> : null}
-              <button type="submit" className="primary-button">
-                Crear usuario
-              </button>
-            </form>
-          </div>
-          <div className="stack">
-            <h4 style={{ margin: 0 }}>Empleados existentes</h4>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {employeesList.map((u) => (
-                <span key={u.username} className="summary-chip">
-                  {u.username} → /#/empleado/{u.username}
-                </span>
-              ))}
-              {employeesList.length === 0 ? (
-                <p className="muted" style={{ margin: 0 }}>Aún no hay empleados creados.</p>
-              ) : null}
+                <label className="field">
+                  <span className="field-label">Rol</span>
+                  <select
+                    className="control"
+                    value={newUser.role}
+                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                  >
+                    <option value="employee">Empleado</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+                {newUser.role === "admin" ? (
+                  <label className="field">
+                    <span className="field-label">Contraseña (solo admin)</span>
+                    <input
+                      className="control"
+                      type="password"
+                      value={newUser.password}
+                      onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                      placeholder="••••••••"
+                    />
+                  </label>
+                ) : null}
+                {creationError ? <p className="muted" style={{ color: "#b91c1c" }}>{creationError}</p> : null}
+                {creationOk ? <p className="muted" style={{ color: "#15803d" }}>{creationOk}</p> : null}
+                <div className="admin-actions" style={{ justifyContent: "flex-start", gap: "8px" }}>
+                  <button type="submit" className="primary-button">
+                    Guardar
+                  </button>
+                  <button type="button" className="ghost-button" onClick={() => setShowCreateModal(false)}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        </div>
+        ) : null}
 
         {appointments.length === 0 ? (
           <div className="panel">
@@ -235,6 +330,76 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
             ))}
           </div>
         )}
+
+        <div className="panel stack" style={{ gap: "14px" }}>
+          <div className="section-heading">
+            <h3 style={{ margin: 0 }}>Calendario diario</h3>
+            <div className="input-row" style={{ flex: "0 0 auto" }}>
+              <label className="field" style={{ minWidth: "180px" }}>
+                <span className="field-label">Fecha</span>
+                <input
+                  className="control"
+                  type="date"
+                  value={calendarDate}
+                  onChange={(e) => setCalendarDate(e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+          <div className="schedule-grid">
+            <div className="schedule-head">
+              <div className="schedule-time">Hora</div>
+              {workers.map((w) => (
+                <div key={w} className="schedule-worker">
+                  {w}
+                </div>
+              ))}
+            </div>
+            <div className="schedule-body">
+              {timeSlots.map((slot) => (
+                <React.Fragment key={slot}>
+                  <div className="schedule-time">{slot}</div>
+                  {calendarData.map(({ worker, appts }) => {
+                    const found = appts.find(
+                      (a) => toMinutes(slot) >= a.start && toMinutes(slot) < a.end
+                    );
+                    if (found) {
+                      const rowSpan = Math.max(1, found.serviceDuration / 30 || 1);
+                      const isStart = toMinutes(slot) === found.start;
+                      return isStart ? (
+                        <div
+                          key={`${worker}-${slot}`}
+                          className={`schedule-cell busy status-${found.status}`}
+                          style={{ gridRow: `span ${rowSpan}` }}
+                        >
+                          <div className="schedule-title">{found.serviceName}</div>
+                          <div className="schedule-meta">
+                            {found.time} · {found.serviceDuration} min
+                          </div>
+                          <div className="schedule-status">{found.status}</div>
+                        </div>
+                      ) : null;
+                    }
+                    return (
+                      <div key={`${worker}-${slot}`} className="schedule-cell free">
+                        Libre
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+          <div className="input-row" style={{ gap: "8px" }}>
+            <span className="badge-soft" style={{ background: "#ecfdf3", borderColor: "#86efac" }}>
+              Confirmada
+            </span>
+            <span className="badge-soft" style={{ background: "#fff9e6", borderColor: "#f5d276" }}>
+              Pendiente
+            </span>
+            <span className="badge-soft">Libre</span>
+          </div>
+        </div>
       </div>
     </div>
   );
