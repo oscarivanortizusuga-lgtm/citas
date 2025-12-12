@@ -12,22 +12,25 @@ function App() {
   const [selectedTime, setSelectedTime] = useState("");
   const { addAppointment } = useAppointments();
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selectedService || !selectedDate || !selectedTime) return;
 
-    addAppointment({
-      id: Date.now().toString(),
-      serviceName: selectedService.name,
-      serviceDuration: selectedService.duration,
-      date: selectedDate,
-      time: selectedTime,
-      worker: null,
-      status: "pendiente",
-    });
-
-    alert(
-      `Cita confirmada:\n\nServicio: ${selectedService.name}\nFecha: ${selectedDate}\nHora: ${selectedTime}`
-    );
+    try {
+      await addAppointment({
+        serviceName: selectedService.name,
+        serviceDuration: selectedService.duration,
+        date: selectedDate,
+        time: selectedTime,
+        worker: null,
+        status: "pendiente",
+      });
+      alert(
+        `Cita confirmada:\n\nServicio: ${selectedService.name}\nFecha: ${selectedDate}\nHora: ${selectedTime}`
+      );
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Error al crear la cita. Intenta de nuevo.");
+    }
   };
 
   return (

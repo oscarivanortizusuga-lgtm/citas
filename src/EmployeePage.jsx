@@ -36,12 +36,13 @@ function generateTimeSlots() {
 const timeSlots = generateTimeSlots();
 
 export function EmployeePage({ initialWorker = "", lockWorker = false }) {
-  const { appointments } = useAppointments();
+  const { appointments, updateAppointment } = useAppointments();
   const [selectedWorker, setSelectedWorker] = useState(initialWorker);
   const [selectedDate, setSelectedDate] = useState("");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminCreds, setAdminCreds] = useState({ user: "", password: "" });
   const [adminError, setAdminError] = useState("");
+  const [statusError, setStatusError] = useState("");
 
   const filteredAppointments = useMemo(() => {
     return appointments
@@ -165,6 +166,11 @@ export function EmployeePage({ initialWorker = "", lockWorker = false }) {
                   <span className="badge-soft">{selectedWorker}</span>
                 ) : null}
               </div>
+              {statusError ? (
+                <p className="notice" style={{ color: "#7f1d1d", borderColor: "#fca5a5", background: "#fef2f2" }}>
+                  {statusError}
+                </p>
+              ) : null}
               {filteredAppointments.length === 0 ? (
                 <p className="notice">No hay citas para este empleado en esta fecha.</p>
               ) : (
@@ -189,10 +195,42 @@ export function EmployeePage({ initialWorker = "", lockWorker = false }) {
                       <div className="muted" style={{ fontWeight: 700 }}>Duración</div>
                       <div>{appt.serviceDuration} min</div>
                       <div className="muted" style={{ fontWeight: 700 }}>Estado</div>
-                      <div>
+                      <div className="stack" style={{ gap: "6px" }}>
                         <span className={`status-pill status-${appt.status}`}>
                           {appt.status}
                         </span>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            className="primary-button"
+                            onClick={async () => {
+                              try {
+                                setStatusError("");
+                                await updateAppointment(appt.id, { status: "confirmada" });
+                              } catch (err) {
+                                console.error(err);
+                                setStatusError("No se pudo actualizar el estado.");
+                              }
+                            }}
+                          >
+                            Completar
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={async () => {
+                              try {
+                                setStatusError("");
+                                await updateAppointment(appt.id, { status: "cancelada" });
+                              } catch (err) {
+                                console.error(err);
+                                setStatusError("No se pudo actualizar el estado.");
+                              }
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}

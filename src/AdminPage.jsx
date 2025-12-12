@@ -26,7 +26,7 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
     return startA < endB && startB < endA;
   };
 
-  const handleWorkerChange = (id, worker) => {
+  const handleWorkerChange = async (id, worker) => {
     const target = appointments.find((appt) => appt.id === id);
     if (!target) return;
     if (
@@ -46,10 +46,15 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
       return;
     }
     setAssignError("");
-    updateAppointment(id, { worker });
+    try {
+      await updateAppointment(id, { worker });
+    } catch (err) {
+      console.error(err);
+      setAssignError("Error al asignar trabajador. Intenta de nuevo.");
+    }
   };
 
-  const handleStatusChange = (id, status) => {
+  const handleStatusChange = async (id, status) => {
     const target = appointments.find((appt) => appt.id === id);
     if (!target) return;
 
@@ -75,7 +80,12 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
     }
 
     setAssignError("");
-    updateAppointment(id, { status });
+    try {
+      await updateAppointment(id, { status });
+    } catch (err) {
+      console.error(err);
+      setAssignError("Error al actualizar el estado. Intenta de nuevo.");
+    }
   };
 
   const pendingCount = appointments.filter((appt) => appt.status === "pendiente").length;

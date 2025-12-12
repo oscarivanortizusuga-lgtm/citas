@@ -3,47 +3,71 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 const AppointmentsContext = createContext(null);
 
 export function AppointmentsProvider({ children }) {
-  const [appointments, setAppointments] = useState(() => {
-    try {
-      const stored = localStorage.getItem("appointments_data");
-      if (stored) return JSON.parse(stored);
-    } catch (_) {
-      // ignore
-    }
-    return [];
-  });
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    try {
-      localStorage.setItem("appointments_data", JSON.stringify(appointments));
-    } catch (_) {
-      // ignore write errors
-    }
-  }, [appointments]);
+    const fetchAppointments = async () => {
+      try {
+        setLoading(true);
+        setError(false);
+        const res = await fetch("http://localhost:4000/api/appointments");
+        if (!res.ok) throw new Error("Error al cargar citas");
+        const data = await res.json();
+        setAppointments(Array.isArray(data) ? data : []);
+      } catch (_) {
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAppointments();
+  }, []);
 
-  useEffect(() => {
-    const handleStorage = (event) => {
-      if (event.key === "appointments_data" && event.newValue) {
+  const addAppointment = async (appointmentData) => {
+    try {
+      const res = await fetch("http://localhost:4000/api/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(appointmentData),
+      });
+      if (!res.ok) {
+        let message = "Error al crear cita";
         try {
-          const parsed = JSON.parse(event.newValue);
-          setAppointments(parsed);
+          const errJson = await res.json();
+          if (errJson?.message) message = errJson.message;
         } catch (_) {
           // ignore parse errors
         }
+        throw new Error(message);
       }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
-
-  const addAppointment = (appointment) => {
-    setAppointments((prev) => [...prev, appointment]);
+      const created = await res.json();
+      setAppointments((prev) => [...prev, created]);
+      return created;
+    } catch (err) {
+      setError(true);
+      throw err;
+    }
   };
 
-  const updateAppointment = (id, partialData) => {
-    setAppointments((prev) =>
-      prev.map((appt) => (appt.id === id ? { ...appt, ...partialData } : appt))
-    );
+  const updateAppointment = async (id, partialData) => {
+    try {
+      const res = await fetch(`http://localhost:4000/api/appointments/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(partialData),
+      });
+      if (!res.ok) throw new Error("Error al actualizar cita");
+      const updated = await res.json();
+      setAppointments((prev) =>
+        prev.map((appt) => (appt.id === id ? updated : appt))
+      );
+      return updated;
+    } catch (err) {
+      setError(true);
+      throw err;
+    }
   };
 
   const value = useMemo(
@@ -51,8 +75,10 @@ export function AppointmentsProvider({ children }) {
       appointments,
       addAppointment,
       updateAppointment,
+      loading,
+      error,
     }),
-    [appointments]
+    [appointments, loading, error]
   );
 
   return (
