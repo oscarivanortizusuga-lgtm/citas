@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAppointments } from "./context/AppointmentsContext";
+import { API_BASE_URL } from "./config";
 
-const workers = ["Ana", "Luis", "Carla", "Mario"];
+const FALLBACK_WORKERS = ["Ana", "Luis", "Carla", "Mario"];
 
 export function AdminPage({ onLogout, users = [], onCreateUser }) {
   const { appointments, updateAppointment } = useAppointments();
@@ -12,6 +13,37 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
   const [assignError, setAssignError] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [workers, setWorkers] = useState(FALLBACK_WORKERS);
+  const [workersLoading, setWorkersLoading] = useState(true);
+  const [workersError, setWorkersError] = useState(false);
+
+  useEffect(() => {
+    const fetchWorkers = async () => {
+      try {
+        setWorkersLoading(true);
+        setWorkersError(false);
+        console.log("API_BASE_URL (workers) =", API_BASE_URL);
+        const res = await fetch(`${API_BASE_URL}/api/workers`);
+        if (!res.ok) throw new Error("Network response was not ok");
+        const data = await res.json();
+        const normalized =
+          Array.isArray(data) && data.length > 0
+            ? data
+                .map((w) => (typeof w === "string" ? w : w?.name))
+                .filter(Boolean)
+            : FALLBACK_WORKERS;
+        setWorkers(normalized.length > 0 ? normalized : FALLBACK_WORKERS);
+      } catch (err) {
+        console.error(err);
+        setWorkersError(true);
+        setWorkers(FALLBACK_WORKERS);
+      } finally {
+        setWorkersLoading(false);
+      }
+    };
+
+    fetchWorkers();
+  }, [API_BASE_URL]);
 
   const toMinutes = (timeStr) => {
     const [h, m] = timeStr.split(":").map(Number);
@@ -191,6 +223,15 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
               Ver todas
             </button>
           </div>
+          {workersLoading ? (
+            <p className="muted" style={{ margin: "8px 0 0" }}>
+              Cargando trabajadores...
+            </p>
+          ) : workersError ? (
+            <p className="muted" style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+              Error al cargar trabajadores (lista local en uso)
+            </p>
+          ) : null}
         </div>
 
         {assignError ? (
@@ -300,6 +341,7 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
                 <div>
                   <div className="muted" style={{ fontWeight: 700 }}>Trabajador</div>
                   <select
+                    disabled={workersLoading}
                     value={appt.worker ?? ""}
                     onChange={(e) =>
                       handleWorkerChange(appt.id, e.target.value || null)

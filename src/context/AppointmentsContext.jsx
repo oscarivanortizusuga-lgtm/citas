@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../config";
 
 const AppointmentsContext = createContext(null);
 
@@ -12,7 +13,8 @@ export function AppointmentsProvider({ children }) {
       try {
         setLoading(true);
         setError(false);
-        const res = await fetch("http://localhost:4000/api/appointments");
+        console.log("API_BASE_URL (appointments) =", API_BASE_URL);
+        const res = await fetch(`${API_BASE_URL}/api/appointments`);
         if (!res.ok) throw new Error("Error al cargar citas");
         const data = await res.json();
         setAppointments(Array.isArray(data) ? data : []);
@@ -27,7 +29,7 @@ export function AppointmentsProvider({ children }) {
 
   const addAppointment = async (appointmentData) => {
     try {
-      const res = await fetch("http://localhost:4000/api/appointments", {
+      const res = await fetch(`${API_BASE_URL}/api/appointments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(appointmentData),
@@ -53,7 +55,7 @@ export function AppointmentsProvider({ children }) {
 
   const updateAppointment = async (id, partialData) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/appointments/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/appointments/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(partialData),

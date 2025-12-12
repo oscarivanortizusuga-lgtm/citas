@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { API_BASE_URL } from "../config";
 
 export function ServiceSelector({ selectedService, onSelect }) {
   const [services, setServices] = useState([]);
@@ -10,7 +11,8 @@ export function ServiceSelector({ selectedService, onSelect }) {
       try {
         setLoading(true);
         setError(false);
-        const res = await fetch("http://localhost:4000/api/services");
+        console.log("API_BASE_URL =", API_BASE_URL);
+        const res = await fetch(`${API_BASE_URL}/api/services`);
         if (!res.ok) throw new Error("Network response was not ok");
         const data = await res.json();
         setServices(data);
