@@ -3,6 +3,7 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const {
+  initDb,
   getAllAppointments,
   createAppointment,
   updateAppointment: updateAppointmentDb,
@@ -90,13 +91,13 @@ app.get("/api/workers", (_req, res) => {
   res.json(workers);
 });
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ message: "Faltan credenciales" });
   }
 
-  const user = getUserByUsername(username);
+  const user = await getUserByUsername(username);
   if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
     return res.status(401).json({ message: "Credenciales inválidas" });
   }
@@ -118,56 +119,170 @@ app.get("/api/auth/me", authRequired, (req, res) => {
   });
 });
 
-app.get("/api/appointments", authRequired, (req, res) => {
-  const all = getAllAppointments();
-  if (req.user.role === "admin") {
-    return res.json(all);
-  }
-  if (req.user.role === "employee") {
-    if (!req.user.workerName) {
-      return res.status(403).json({ message: "Empleado sin worker asignado" });
+app.get("/api/appointments", authRequired, async (req, res) => {
+  try {
+    const all = await getAllAppointments();
+    if (req.user.role === "admin") {
+      return res.json(all);
     }
-    const own = all.filter((appt) => appt.worker === req.user.workerName);
-    return res.json(own);
+    if (req.user.role === "employee") {
+      if (!req.user.workerName) {
+        return res.status(403).json({ message: "Empleado sin worker asignado" });
+      }
+      const own = all.filter((appt) => appt.worker === req.user.workerName);
+      return res.json(own);
+    }
+    return res.status(403).json({ message: "No autorizado" });
+  } catch (err) {
+    console.error("GET /api/appointments error", err);
+    res.status(500).json({ message: "Error al obtener citas" });
   }
-  return res.status(403).json({ message: "No autorizado" });
 });
 
-app.post("/api/appointments", (req, res) => {
+app.post("/api/appointments", async (req, res) => {
   const { serviceName, serviceDuration, date, time, worker, status } = req.body || {};
 
   if (!serviceName || !serviceDuration || !date || !time) {
     return res.status(400).json({ error: "Faltan datos obligatorios" });
   }
 
-  if (hasConflict({ worker, date, time })) {
-    return res
-      .status(400)
-      .json({ message: "Conflicto: el trabajador ya tiene una cita en ese horario" });
+  try {
+    if (await hasConflict({ worker, date, time })) {
+      return res
+        .status(400)
+        .json({ message: "Conflicto: el trabajador ya tiene una cita en ese horario" });
+    }
+
+    const toInsert = {
+      id: Date.now().toString(),
+      serviceName,
+      serviceDuration,
+      date,
+      time,
+      worker: worker ?? null,
+      status: status ?? "pendiente",
+    };
+
+    console.log("INSERT appointment", {
+      service_name: toInsert.serviceName,
+      date: toInsert.date,
+      time: toInsert.time,
+      worker: toInsert.worker,
+      status: toInsert.status,
+    });
+
+    const created = await createAppointment(toInsert);
+    console.log("INSERT OK", created.id);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("INSERT ERROR", err);
+    res.status(500).json({ message: "Error al crear cita", details: err.message });
   }
-
-  const created = createAppointment({
-    id: Date.now().toString(),
-    serviceName,
-    serviceDuration,
-    date,
-    time,
-    worker: worker ?? null,
-    status: status ?? "pendiente",
-  });
-
-  res.status(201).json(created);
 });
 
-app.put("/api/appointments/:id", authRequired, requireRole("admin"), (req, res) => {
+app.put("/api/appointments/:id", authRequired, requireRole("admin"), async (req, res) => {
   const { id } = req.params;
-  const updated = updateAppointmentDb(id, req.body || {});
-  if (!updated) {
-    return res.status(404).json({ message: "Appointment not found" });
+  try {
+    const updated = await updateAppointmentDb(id, req.body || {});
+    if (!updated) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+    res.json(updated);
+  } catch (err) {
+    console.error("PUT /api/appointments/:id error", err);
+    res.status(500).json({ message: "Error al actualizar cita", details: err.message });
   }
-  res.json(updated);
 });
 
-app.listen(PORT, () => {
-  console.log(`API running on http://localhost:${PORT}`);
+// Admin: list users
+app.get("/api/admin/users", authRequired, requireRole("admin"), async (_req, res) => {
+  try {
+    const users = await listUsers();
+    res.json(users);
+  } catch (err) {
+    console.error("GET /api/admin/users error", err);
+    res.status(500).json({ message: "Error al obtener usuarios" });
+  }
 });
+
+// Admin: create user
+app.post("/api/admin/users", authRequired, requireRole("admin"), async (req, res) => {
+  const { username, password, role, workerName } = req.body || {};
+  if (!username || !password || !role) {
+    return res.status(400).json({ message: "Faltan datos obligatorios" });
+  }
+  if (!["admin", "employee"].includes(role)) {
+    return res.status(400).json({ message: "Rol inválido" });
+  }
+  if (role === "employee" && !workerName) {
+    return res.status(400).json({ message: "workerName es obligatorio para empleados" });
+  }
+
+  try {
+    const existing = await getUserByUsername(username);
+    if (existing) {
+      return res.status(409).json({ message: "El usuario ya existe" });
+    }
+
+    const created = await createUser({ username, password, role, workerName });
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("POST /api/admin/users error", err);
+    res.status(500).json({ message: "Error al crear usuario", details: err.message });
+  }
+});
+
+// Admin: change password
+app.put("/api/admin/users/:username/password", authRequired, requireRole("admin"), async (req, res) => {
+  const { username } = req.params;
+  const { newPassword } = req.body || {};
+  if (!newPassword) {
+    return res.status(400).json({ message: "Nueva contraseña requerida" });
+  }
+  try {
+    const target = await getUserByUsername(username);
+    if (!target) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+    const passwordHash = bcrypt.hashSync(newPassword, 10);
+    await updateUserPassword(username, passwordHash);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /api/admin/users/:username/password error", err);
+    res.status(500).json({ message: "Error al actualizar contraseña", details: err.message });
+  }
+});
+
+// Admin: set active (optional)
+app.put("/api/admin/users/:username/active", authRequired, requireRole("admin"), async (req, res) => {
+  const { username } = req.params;
+  const { active } = req.body || {};
+  if (active !== 0 && active !== 1) {
+    return res.status(400).json({ message: "active debe ser 0 o 1" });
+  }
+  try {
+    const target = await getUserByUsername(username);
+    if (!target) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+    await setUserActive(username, active);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /api/admin/users/:username/active error", err);
+    res.status(500).json({ message: "Error al actualizar usuario", details: err.message });
+  }
+});
+
+async function start() {
+  try {
+    await initDb();
+    app.listen(PORT, () => {
+      console.log(`API running on http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error("Failed to init DB", err);
+    process.exit(1);
+  }
+}
+
+start();
