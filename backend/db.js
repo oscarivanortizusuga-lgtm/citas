@@ -67,7 +67,7 @@ async function initDb() {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL,
       worker_name TEXT,
-      active INTEGER NOT NULL DEFAULT 1
+      active BOOLEAN NOT NULL DEFAULT TRUE
     )
   `);
 
@@ -78,7 +78,7 @@ async function initDb() {
       const passwordHash = bcrypt.hashSync(u.password, 10);
       await pool.query(
         `INSERT INTO users (id, username, password_hash, role, worker_name, active)
-         VALUES ($1, $2, $3, $4, $5, 1)`,
+         VALUES ($1, $2, $3, $4, $5, TRUE)`,
         [genId("user"), u.username, passwordHash, u.role, u.workerName]
       );
     }
@@ -201,7 +201,7 @@ async function createUser({ username, password, role, workerName }) {
   const id = genId("user");
   const res = await pool.query(
     `INSERT INTO users (id, username, password_hash, role, worker_name, active)
-     VALUES ($1, $2, $3, $4, $5, 1)
+     VALUES ($1, $2, $3, $4, $5, TRUE)
      RETURNING id, username, role, worker_name, active`,
     [id, username, passwordHash, role, workerName ?? null]
   );
@@ -219,9 +219,10 @@ async function updateUserPassword(username, passwordHash) {
 
 async function setUserActive(username, active) {
   const pool = await getPool();
+  const normalized = active === true || active === 1 || active === "1" || active === "true";
   const res = await pool.query(
     `UPDATE users SET active = $1 WHERE username = $2`,
-    [active, username]
+    [normalized, username]
   );
   return res.rowCount > 0;
 }
