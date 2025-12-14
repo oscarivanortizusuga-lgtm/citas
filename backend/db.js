@@ -1,6 +1,10 @@
+const dns = require("dns");
 const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+
+// Prefer IPv4 to avoid ENETUNREACH on hosts that resolve to IPv6 first
+dns.setDefaultResultOrder("ipv4first");
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
