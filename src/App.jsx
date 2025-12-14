@@ -4,7 +4,6 @@ import { DateSelector } from "./components/DateSelector";
 import { TimeSelector } from "./components/TimeSelector";
 import { Confirmation } from "./components/Confirmation";
 import { useAppointments } from "./context/AppointmentsContext";
-import { useAuth } from "./context/AuthContext";
 import "./App.css";
 
 function App() {
@@ -12,11 +11,6 @@ function App() {
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const { addAppointment } = useAppointments();
-  const { user, logout } = useAuth();
-
-  const sessionLabel = user
-    ? `Sesión: ${user.username} (${user.role}${user.workerName ? ` · ${user.workerName}` : ""})`
-    : "Sesión: invitado";
 
   const handleConfirm = async () => {
     if (!selectedService || !selectedDate || !selectedTime) return;
@@ -42,25 +36,6 @@ function App() {
   return (
     <div className="page">
       <div className="app-shell">
-        <div
-          className="panel"
-          style={{
-            marginBottom: "14px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "12px",
-          }}
-        >
-          <p className="muted" style={{ margin: 0 }}>
-            {sessionLabel}
-          </p>
-          {user ? (
-            <button className="ghost-button" type="button" onClick={logout}>
-              Cerrar sesión
-            </button>
-          ) : null}
-        </div>
         <header className="page-header">
           <h1 className="brand-mark" aria-label="Magic Beauty">
             <span className="brand-letter">MA</span>
