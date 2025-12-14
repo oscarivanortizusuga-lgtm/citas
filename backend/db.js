@@ -3,23 +3,35 @@ const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 
-// Prefer IPv4 to avoid ENETUNREACH on hosts that resolve to IPv6 first
-dns.setDefaultResultOrder("ipv4first");
-
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error("DATABASE_URL es requerido para conectar a Postgres");
 }
 
-const ssl =
-  connectionString.includes("localhost") || connectionString.includes("127.0.0.1")
-    ? false
-    : { rejectUnauthorized: false };
+let pool;
 
-const pool = new Pool({
-  connectionString,
-  ssl,
-});
+async function getPool() {
+  if (pool) return pool;
+
+  const url = new URL(connectionString);
+  // Forzar resolución IPv4 para evitar ENETUNREACH con AAAA
+  const hostLookup = await dns.promises.lookup(url.hostname, { family: 4 });
+  const ssl =
+    url.hostname === "localhost" || url.hostname === "127.0.0.1"
+      ? false
+      : { rejectUnauthorized: false };
+
+  pool = new Pool({
+    host: hostLookup.address,
+    port: Number(url.port) || 5432,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.replace(/^\//, ""),
+    ssl,
+  });
+
+  return pool;
+}
 
 const DEFAULT_USERS = [
   { username: "admin", password: "admin123", role: "admin", workerName: null },
@@ -34,6 +46,8 @@ function genId(prefix = "id") {
 }
 
 async function initDb() {
+  const pool = await getPool();
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS appointments (
       id TEXT PRIMARY KEY,
@@ -97,6 +111,7 @@ function mapUserRow(row) {
 }
 
 async function listAppointments() {
+  const pool = await getPool();
   const res = await pool.query(`SELECT * FROM appointments ORDER BY date, time`);
   return res.rows.map(mapAppointmentRow);
 }
@@ -106,6 +121,7 @@ async function getAllAppointments() {
 }
 
 async function createAppointment(appointment) {
+  const pool = await getPool();
   const id = appointment.id || genId("appt");
   const { serviceName, serviceDuration, date, time, worker, status } = appointment;
   const res = await pool.query(
@@ -118,6 +134,7 @@ async function createAppointment(appointment) {
 }
 
 async function updateAppointment(id, partialData) {
+  const pool = await getPool();
   const fields = [];
   const values = [];
   const mapping = {
@@ -153,6 +170,7 @@ async function updateAppointment(id, partialData) {
 
 async function hasConflict({ worker, date, time }) {
   if (!worker || !date || !time) return false;
+  const pool = await getPool();
   const res = await pool.query(
     `SELECT 1 FROM appointments WHERE worker = $1 AND date = $2 AND time = $3 AND status != 'cancelada' LIMIT 1`,
     [worker, date, time]
@@ -161,6 +179,7 @@ async function hasConflict({ worker, date, time }) {
 }
 
 async function getUserByUsername(username) {
+  const pool = await getPool();
   const res = await pool.query(
     `SELECT id, username, password_hash, role, worker_name, active FROM users WHERE username = $1`,
     [username]
@@ -169,6 +188,7 @@ async function getUserByUsername(username) {
 }
 
 async function listUsers() {
+  const pool = await getPool();
   const res = await pool.query(
     `SELECT id, username, role, worker_name, active FROM users ORDER BY username`
   );
@@ -176,6 +196,7 @@ async function listUsers() {
 }
 
 async function createUser({ username, password, role, workerName }) {
+  const pool = await getPool();
   const passwordHash = bcrypt.hashSync(password, 10);
   const id = genId("user");
   const res = await pool.query(
@@ -188,6 +209,7 @@ async function createUser({ username, password, role, workerName }) {
 }
 
 async function updateUserPassword(username, passwordHash) {
+  const pool = await getPool();
   const res = await pool.query(
     `UPDATE users SET password_hash = $1 WHERE username = $2`,
     [passwordHash, username]
@@ -196,6 +218,7 @@ async function updateUserPassword(username, passwordHash) {
 }
 
 async function setUserActive(username, active) {
+  const pool = await getPool();
   const res = await pool.query(
     `UPDATE users SET active = $1 WHERE username = $2`,
     [active, username]
