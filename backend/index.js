@@ -8,6 +8,11 @@ const {
   updateAppointment: updateAppointmentDb,
   hasConflict,
   getUserByUsername,
+  createUser,
+  listUsers,
+  updateUserPassword,
+  setUserActive,
+  getDbInfo,
 } = require("./db");
 
 const app = express();
@@ -73,7 +78,8 @@ app.get("/", (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  const info = getDbInfo();
+  res.json({ ok: true, ...info });
 });
 
 app.get("/api/services", (_req, res) => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAppointments } from "./context/AppointmentsContext";
 import { API_BASE_URL } from "./config";
+import { UserManagement } from "./components/UserManagement";
 
 const FALLBACK_WORKERS = ["Ana", "Luis", "Carla", "Mario"];
 
@@ -16,6 +17,7 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
   const [workers, setWorkers] = useState(FALLBACK_WORKERS);
   const [workersLoading, setWorkersLoading] = useState(true);
   const [workersError, setWorkersError] = useState(false);
+  const [adminView, setAdminView] = useState("appointments"); // "appointments" | "users"
 
   useEffect(() => {
     const fetchWorkers = async () => {
@@ -210,248 +212,256 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
           <div className="segmented">
             <button
               type="button"
-              className={showPendingOnly ? "primary-button" : "ghost-button"}
-              onClick={() => setShowPendingOnly(true)}
+              className={adminView === "appointments" ? "primary-button" : "ghost-button"}
+              onClick={() => setAdminView("appointments")}
             >
-              Ver solo pendientes
+              Citas
             </button>
             <button
               type="button"
-              className={!showPendingOnly ? "primary-button" : "ghost-button"}
-              onClick={() => setShowPendingOnly(false)}
+              className={adminView === "users" ? "primary-button" : "ghost-button"}
+              onClick={() => setAdminView("users")}
             >
-              Ver todas
+              Usuarios
             </button>
           </div>
-          {workersLoading ? (
-            <p className="muted" style={{ margin: "8px 0 0" }}>
-              Cargando trabajadores...
-            </p>
-          ) : workersError ? (
-            <p className="muted" style={{ margin: "8px 0 0", color: "#b91c1c" }}>
-              Error al cargar trabajadores (lista local en uso)
-            </p>
+          {adminView === "appointments" ? (
+            workersLoading ? (
+              <p className="muted" style={{ margin: "8px 0 0" }}>
+                Cargando trabajadores...
+              </p>
+            ) : workersError ? (
+              <p className="muted" style={{ margin: "8px 0 0", color: "#b91c1c" }}>
+                Error al cargar trabajadores (lista local en uso)
+              </p>
+            ) : null
           ) : null}
         </div>
 
-        {assignError ? (
-          <div className="panel">
-            <p className="notice" style={{ color: "#7f1d1d", borderColor: "#fca5a5", background: "#fef2f2" }}>
-              {assignError}
-            </p>
-          </div>
-        ) : null}
-
-        {showCreateModal ? (
-          <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <div className="section-heading">
-                <div>
-                  <h3 style={{ margin: 0 }}>Crear usuario</h3>
-                  <p className="helper">Admin requiere contraseña; empleados solo usuario.</p>
-                </div>
-                <button className="ghost-button" type="button" onClick={() => setShowCreateModal(false)}>
-                  Cerrar
-                </button>
+        {adminView === "users" ? (
+          <UserManagement />
+        ) : (
+          <>
+            {assignError ? (
+              <div className="panel">
+                <p className="notice" style={{ color: "#7f1d1d", borderColor: "#fca5a5", background: "#fef2f2" }}>
+                  {assignError}
+                </p>
               </div>
-              <form onSubmit={handleCreateUser} className="stack">
-                <label className="field">
-                  <span className="field-label">Usuario</span>
-                  <input
-                    className="control"
-                    value={newUser.username}
-                    onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                    placeholder="ej. ana"
-                  />
-                </label>
-                <label className="field">
-                  <span className="field-label">Rol</span>
-                  <select
-                    className="control"
-                    value={newUser.role}
-                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+            ) : null}
+
+            {showCreateModal ? (
+              <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
+                <div className="modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="section-heading">
+                    <div>
+                      <h3 style={{ margin: 0 }}>Crear usuario</h3>
+                      <p className="helper">Admin requiere contraseña; empleados solo usuario.</p>
+                    </div>
+                    <button className="ghost-button" type="button" onClick={() => setShowCreateModal(false)}>
+                      Cerrar
+                    </button>
+                  </div>
+                  <form onSubmit={handleCreateUser} className="stack">
+                    <label className="field">
+                      <span className="field-label">Usuario</span>
+                      <input
+                        className="control"
+                        value={newUser.username}
+                        onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                        placeholder="ej. ana"
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="field-label">Rol</span>
+                      <select
+                        className="control"
+                        value={newUser.role}
+                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                      >
+                        <option value="employee">Empleado</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </label>
+                    {newUser.role === "admin" ? (
+                      <label className="field">
+                        <span className="field-label">Contraseña (solo admin)</span>
+                        <input
+                          className="control"
+                          type="password"
+                          value={newUser.password}
+                          onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                          placeholder="••••••••"
+                        />
+                      </label>
+                    ) : null}
+                    {creationError ? <p className="muted" style={{ color: "#b91c1c" }}>{creationError}</p> : null}
+                    {creationOk ? <p className="muted" style={{ color: "#15803d" }}>{creationOk}</p> : null}
+                    <div className="admin-actions" style={{ justifyContent: "flex-start", gap: "8px" }}>
+                      <button type="submit" className="primary-button">
+                        Guardar
+                      </button>
+                      <button type="button" className="ghost-button" onClick={() => setShowCreateModal(false)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            ) : null}
+
+            {appointments.length === 0 ? (
+              <div className="panel">
+                <p className="notice">No hay citas registradas aún.</p>
+              </div>
+            ) : filteredAppointments.length === 0 ? (
+              <div className="panel">
+                <p className="notice">No hay citas con el filtro seleccionado.</p>
+              </div>
+            ) : (
+              <div className="stack" style={{ gap: "12px" }}>
+                {filteredAppointments.map((appt) => (
+                  <div
+                    key={appt.id}
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderRadius: "14px",
+                      padding: "12px",
+                      background: "#fffdf7",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                      gap: "10px 12px",
+                      alignItems: "center",
+                    }}
                   >
-                    <option value="employee">Empleado</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </label>
-                {newUser.role === "admin" ? (
-                  <label className="field">
-                    <span className="field-label">Contraseña (solo admin)</span>
+                    <div>
+                      <div className="muted" style={{ fontWeight: 700 }}>Servicio</div>
+                      <div>{appt.serviceName}</div>
+                    </div>
+                    <div>
+                      <div className="muted" style={{ fontWeight: 700 }}>Fecha</div>
+                      <div>{appt.date}</div>
+                    </div>
+                    <div>
+                      <div className="muted" style={{ fontWeight: 700 }}>Hora</div>
+                      <div>{appt.time}</div>
+                    </div>
+                    <div>
+                      <div className="muted" style={{ fontWeight: 700 }}>Trabajador</div>
+                      <select
+                        disabled={workersLoading}
+                        value={appt.worker ?? ""}
+                        onChange={(e) =>
+                          handleWorkerChange(appt.id, e.target.value || null)
+                        }
+                        className="control"
+                      >
+                        <option value="">Sin asignar</option>
+                        {workers.map((w) => (
+                          <option key={w} value={w}>
+                            {w}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="muted" style={{ fontWeight: 700 }}>Estado</div>
+                      <span className={`status-pill status-${appt.status}`}>
+                        {appt.status}
+                      </span>
+                    </div>
+                    <div className="admin-actions" style={{ justifyContent: "flex-start" }}>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => handleStatusChange(appt.id, "confirmada")}
+                      >
+                        Confirmar
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => handleStatusChange(appt.id, "cancelada")}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="panel stack" style={{ gap: "14px" }}>
+              <div className="section-heading">
+                <h3 style={{ margin: 0 }}>Calendario diario</h3>
+                <div className="input-row" style={{ flex: "0 0 auto" }}>
+                  <label className="field" style={{ minWidth: "180px" }}>
+                    <span className="field-label">Fecha</span>
                     <input
                       className="control"
-                      type="password"
-                      value={newUser.password}
-                      onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                      placeholder="••••••••"
+                      type="date"
+                      value={calendarDate}
+                      onChange={(e) => setCalendarDate(e.target.value)}
                     />
                   </label>
-                ) : null}
-                {creationError ? <p className="muted" style={{ color: "#b91c1c" }}>{creationError}</p> : null}
-                {creationOk ? <p className="muted" style={{ color: "#15803d" }}>{creationOk}</p> : null}
-                <div className="admin-actions" style={{ justifyContent: "flex-start", gap: "8px" }}>
-                  <button type="submit" className="primary-button">
-                    Guardar
-                  </button>
-                  <button type="button" className="ghost-button" onClick={() => setShowCreateModal(false)}>
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        ) : null}
-
-        {appointments.length === 0 ? (
-          <div className="panel">
-            <p className="notice">No hay citas registradas aún.</p>
-          </div>
-        ) : filteredAppointments.length === 0 ? (
-          <div className="panel">
-            <p className="notice">No hay citas con el filtro seleccionado.</p>
-          </div>
-        ) : (
-          <div className="stack" style={{ gap: "12px" }}>
-            {filteredAppointments.map((appt) => (
-              <div
-                key={appt.id}
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: "14px",
-                  padding: "12px",
-                  background: "#fffdf7",
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                  gap: "10px 12px",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <div className="muted" style={{ fontWeight: 700 }}>Servicio</div>
-                  <div>{appt.serviceName}</div>
-                </div>
-                <div>
-                  <div className="muted" style={{ fontWeight: 700 }}>Fecha</div>
-                  <div>{appt.date}</div>
-                </div>
-                <div>
-                  <div className="muted" style={{ fontWeight: 700 }}>Hora</div>
-                  <div>{appt.time}</div>
-                </div>
-                <div>
-                  <div className="muted" style={{ fontWeight: 700 }}>Trabajador</div>
-                  <select
-                    disabled={workersLoading}
-                    value={appt.worker ?? ""}
-                    onChange={(e) =>
-                      handleWorkerChange(appt.id, e.target.value || null)
-                    }
-                    className="control"
-                  >
-                    <option value="">Sin asignar</option>
-                    {workers.map((w) => (
-                      <option key={w} value={w}>
-                        {w}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <div className="muted" style={{ fontWeight: 700 }}>Estado</div>
-                  <span className={`status-pill status-${appt.status}`}>
-                    {appt.status}
-                  </span>
-                </div>
-                <div className="admin-actions" style={{ justifyContent: "flex-start" }}>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => handleStatusChange(appt.id, "confirmada")}
-                  >
-                    Confirmar
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => handleStatusChange(appt.id, "cancelada")}
-                  >
-                    Cancelar
-                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-
-        <div className="panel stack" style={{ gap: "14px" }}>
-          <div className="section-heading">
-            <h3 style={{ margin: 0 }}>Calendario diario</h3>
-            <div className="input-row" style={{ flex: "0 0 auto" }}>
-              <label className="field" style={{ minWidth: "180px" }}>
-                <span className="field-label">Fecha</span>
-                <input
-                  className="control"
-                  type="date"
-                  value={calendarDate}
-                  onChange={(e) => setCalendarDate(e.target.value)}
-                />
-              </label>
-            </div>
-          </div>
-          <div className="schedule-grid">
-            <div className="schedule-head">
-              <div className="schedule-time">Hora</div>
-              {workers.map((w) => (
-                <div key={w} className="schedule-worker">
-                  {w}
+              <div className="schedule-grid">
+                <div className="schedule-head">
+                  <div className="schedule-time">Hora</div>
+                  {workers.map((w) => (
+                    <div key={w} className="schedule-worker">
+                      {w}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="schedule-body">
-              {timeSlots.map((slot) => (
-                <React.Fragment key={slot}>
-                  <div className="schedule-time">{slot}</div>
-                  {calendarData.map(({ worker, appts }) => {
-                    const found = appts.find(
-                      (a) => toMinutes(slot) >= a.start && toMinutes(slot) < a.end
-                    );
-                    if (found) {
-                      const rowSpan = Math.max(1, found.serviceDuration / 30 || 1);
-                      const isStart = toMinutes(slot) === found.start;
-                      return isStart ? (
-                        <div
-                          key={`${worker}-${slot}`}
-                          className={`schedule-cell busy status-${found.status}`}
-                          style={{ gridRow: `span ${rowSpan}` }}
-                        >
-                          <div className="schedule-title">{found.serviceName}</div>
-                          <div className="schedule-meta">
-                            {found.time} · {found.serviceDuration} min
+                <div className="schedule-body">
+                  {timeSlots.map((slot) => (
+                    <React.Fragment key={slot}>
+                      <div className="schedule-time">{slot}</div>
+                      {calendarData.map(({ worker, appts }) => {
+                        const found = appts.find(
+                          (a) => toMinutes(slot) >= a.start && toMinutes(slot) < a.end
+                        );
+                        if (found) {
+                          const rowSpan = Math.max(1, found.serviceDuration / 30 || 1);
+                          const isStart = toMinutes(slot) === found.start;
+                          return isStart ? (
+                            <div
+                              key={`${worker}-${slot}`}
+                              className={`schedule-cell busy status-${found.status}`}
+                              style={{ gridRow: `span ${rowSpan}` }}
+                            >
+                              <div className="schedule-title">{found.serviceName}</div>
+                              <div className="schedule-meta">
+                                {found.time} · {found.serviceDuration} min
+                              </div>
+                              <div className="schedule-status">{found.status}</div>
+                            </div>
+                          ) : null;
+                        }
+                        return (
+                          <div key={`${worker}-${slot}`} className="schedule-cell free">
+                            Libre
                           </div>
-                          <div className="schedule-status">{found.status}</div>
-                        </div>
-                      ) : null;
-                    }
-                    return (
-                      <div key={`${worker}-${slot}`} className="schedule-cell free">
-                        Libre
-                      </div>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+              <div className="input-row" style={{ gap: "8px" }}>
+                <span className="badge-soft" style={{ background: "#ecfdf3", borderColor: "#86efac" }}>
+                  Confirmada
+                </span>
+                <span className="badge-soft" style={{ background: "#fff9e6", borderColor: "#f5d276" }}>
+                  Pendiente
+                </span>
+                <span className="badge-soft">Libre</span>
+              </div>
             </div>
-          </div>
-          <div className="input-row" style={{ gap: "8px" }}>
-            <span className="badge-soft" style={{ background: "#ecfdf3", borderColor: "#86efac" }}>
-              Confirmada
-            </span>
-            <span className="badge-soft" style={{ background: "#fff9e6", borderColor: "#f5d276" }}>
-              Pendiente
-            </span>
-            <span className="badge-soft">Libre</span>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

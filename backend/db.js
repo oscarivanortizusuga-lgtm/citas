@@ -27,9 +27,18 @@ db.exec(`
     username TEXT UNIQUE NOT NULL,
     passwordHash TEXT NOT NULL,
     role TEXT NOT NULL,
-    workerName TEXT
+    workerName TEXT,
+    active INTEGER NOT NULL DEFAULT 1
   )
 `);
+
+// Try to add "active" column if the table existed without it
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1`);
+  db.exec(`UPDATE users SET active = 1 WHERE active IS NULL`);
+} catch (_) {
+  // ignore if column already exists
+}
 
 const selectAllStmt = db.prepare(`SELECT * FROM appointments`);
 const insertStmt = db.prepare(`
@@ -41,22 +50,29 @@ const getByIdStmt = db.prepare(`SELECT * FROM appointments WHERE id = ?`);
 const conflictStmt = db.prepare(
   `SELECT 1 FROM appointments WHERE worker = ? AND date = ? AND time = ? AND status != 'cancelada' LIMIT 1`
 );
-const getUserByUsernameStmt = db.prepare(
-  `SELECT id, username, passwordHash, role, workerName FROM users WHERE username = ?`
-);
+// Add users table and attempt to add "active" if missing
 const insertUserStmt = db.prepare(`
-  INSERT INTO users (id, username, passwordHash, role, workerName)
-  VALUES (@id, @username, @passwordHash, @role, @workerName)
+  INSERT INTO users (id, username, passwordHash, role, workerName, active)
+  VALUES (@id, @username, @passwordHash, @role, @workerName, @active)
 `);
 const countUsersStmt = db.prepare(`SELECT COUNT(*) as count FROM users`);
-const listUsersStmt = db.prepare(`SELECT id, username, role, workerName FROM users`);
+const listUsersStmt = db.prepare(`SELECT id, username, role, workerName, active FROM users`);
+const getUserByUsernameStmt = db.prepare(
+  `SELECT id, username, passwordHash, role, workerName, active FROM users WHERE username = ?`
+);
+const updatePasswordStmt = db.prepare(
+  `UPDATE users SET passwordHash = @passwordHash WHERE username = @username`
+);
+const updateActiveStmt = db.prepare(
+  `UPDATE users SET active = @active WHERE username = @username`
+);
 
 const DEFAULT_USERS = [
-  { username: "admin", password: "admin123", role: "admin", workerName: null, id: "user_admin" },
-  { username: "ana", password: "ana123", role: "employee", workerName: "Ana", id: "user_ana" },
-  { username: "luis", password: "luis123", role: "employee", workerName: "Luis", id: "user_luis" },
-  { username: "carla", password: "carla123", role: "employee", workerName: "Carla", id: "user_carla" },
-  { username: "mario", password: "mario123", role: "employee", workerName: "Mario", id: "user_mario" },
+  { username: "admin", password: "admin123", role: "admin", workerName: null, id: "user_admin", active: 1 },
+  { username: "ana", password: "ana123", role: "employee", workerName: "Ana", id: "user_ana", active: 1 },
+  { username: "luis", password: "luis123", role: "employee", workerName: "Luis", id: "user_luis", active: 1 },
+  { username: "carla", password: "carla123", role: "employee", workerName: "Carla", id: "user_carla", active: 1 },
+  { username: "mario", password: "mario123", role: "employee", workerName: "Mario", id: "user_mario", active: 1 },
 ];
 
 function genId(prefix = "user") {
@@ -74,6 +90,7 @@ function seedUsersIfEmpty() {
         passwordHash: bcrypt.hashSync(u.password, 10),
         role: u.role,
         workerName: u.workerName ?? null,
+        active: u.active ?? 1,
       });
     });
   });
@@ -153,13 +170,38 @@ function createUser({ username, password, role, workerName }) {
     passwordHash,
     role,
     workerName: workerName ?? null,
+    active: 1,
   };
   insertUserStmt.run(user);
-  return { id: user.id, username: user.username, role: user.role, workerName: user.workerName };
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    workerName: user.workerName,
+    active: user.active,
+  };
 }
 
 function listUsers() {
   return listUsersStmt.all();
+}
+
+function updateUserPassword(username, passwordHash) {
+  const res = updatePasswordStmt.run({ username, passwordHash });
+  return res.changes > 0;
+}
+
+function setUserActive(username, active) {
+  const res = updateActiveStmt.run({ username, active });
+  return res.changes > 0;
+}
+
+function getDbInfo() {
+  const url = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
+  if (url && url.protocol.startsWith("postgres")) {
+    return { db: "postgres", dbHost: url.hostname };
+  }
+  return { db: "sqlite", dbHost: dbPath };
 }
 
 module.exports = {
@@ -171,4 +213,7 @@ module.exports = {
   getUserByUsername,
   createUser,
   listUsers,
+  updateUserPassword,
+  setUserActive,
+  getDbInfo,
 };
