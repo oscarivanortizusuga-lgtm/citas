@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "../config";
+import { useAuth } from "./AuthContext";
 
 const AppointmentsContext = createContext(null);
 
@@ -7,14 +8,29 @@ export function AppointmentsProvider({ children }) {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const { token, logout } = useAuth();
 
   useEffect(() => {
     const fetchAppointments = async () => {
+      if (!token) {
+        setAppointments([]);
+        setLoading(false);
+        setError(false);
+        return;
+      }
       try {
         setLoading(true);
         setError(false);
         console.log("API_BASE_URL (appointments) =", API_BASE_URL);
-        const res = await fetch(`${API_BASE_URL}/api/appointments`);
+        const res = await fetch(`${API_BASE_URL}/api/appointments`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (res.status === 401) {
+          logout();
+          throw new Error("Unauthorized");
+        }
         if (!res.ok) throw new Error("Error al cargar citas");
         const data = await res.json();
         setAppointments(Array.isArray(data) ? data : []);
@@ -25,7 +41,7 @@ export function AppointmentsProvider({ children }) {
       }
     };
     fetchAppointments();
-  }, []);
+  }, [token, logout]);
 
   const addAppointment = async (appointmentData) => {
     try {
@@ -55,11 +71,19 @@ export function AppointmentsProvider({ children }) {
 
   const updateAppointment = async (id, partialData) => {
     try {
+      if (!token) throw new Error("No autenticado");
       const res = await fetch(`${API_BASE_URL}/api/appointments/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(partialData),
       });
+      if (res.status === 401) {
+        logout();
+        throw new Error("No autenticado");
+      }
       if (!res.ok) throw new Error("Error al actualizar cita");
       const updated = await res.json();
       setAppointments((prev) =>

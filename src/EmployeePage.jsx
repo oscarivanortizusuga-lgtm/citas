@@ -1,17 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAppointments } from "./context/AppointmentsContext";
+import { useAuth } from "./context/AuthContext";
 
 const workers = ["Ana", "Luis", "Carla", "Mario"];
-
-const getStoredUsers = () => {
-  try {
-    const raw = localStorage.getItem("appointments_users");
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch (_) {
-    return [];
-  }
-};
 
 function generateTimeSlots() {
   const times = [];
@@ -36,13 +27,19 @@ function generateTimeSlots() {
 const timeSlots = generateTimeSlots();
 
 export function EmployeePage({ initialWorker = "", lockWorker = false }) {
-  const { appointments, updateAppointment } = useAppointments();
+  const { appointments, updateAppointment, loading } = useAppointments();
+  const { user } = useAuth();
   const [selectedWorker, setSelectedWorker] = useState(initialWorker);
   const [selectedDate, setSelectedDate] = useState("");
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [adminCreds, setAdminCreds] = useState({ user: "", password: "" });
-  const [adminError, setAdminError] = useState("");
   const [statusError, setStatusError] = useState("");
+
+  useEffect(() => {
+    if (user?.workerName) {
+      setSelectedWorker(user.workerName);
+    } else if (initialWorker) {
+      setSelectedWorker(initialWorker);
+    }
+  }, [user?.workerName, initialWorker]);
 
   const filteredAppointments = useMemo(() => {
     return appointments
@@ -65,65 +62,7 @@ export function EmployeePage({ initialWorker = "", lockWorker = false }) {
             Filtra por empleado y fecha para ver citas y disponibilidad.
           </p>
           <p className="helper">Los estados, horarios y colores se mantienen en el tema actual.</p>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "8px" }}>
-            <button className="ghost-button" type="button" onClick={() => setShowAdminLogin((v) => !v)}>
-              {showAdminLogin ? "Cerrar acceso admin" : "Entrar como admin"}
-            </button>
-          </div>
         </header>
-
-        {showAdminLogin && (
-          <div className="panel" style={{ maxWidth: "460px" }}>
-            <div className="section-heading">
-              <div>
-                <h3 style={{ margin: 0 }}>Acceso admin</h3>
-                <p className="helper">Solo usuarios admin creados en el panel.</p>
-              </div>
-              <span className="badge-soft">Seguro</span>
-            </div>
-            <form
-              className="stack"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const users = getStoredUsers();
-                const record = users.find(
-                  (u) => u.username === adminCreds.user && u.role === "admin"
-                );
-                if (record && record.password === adminCreds.password) {
-                  sessionStorage.setItem("admin_session", JSON.stringify({ user: record.username }));
-                  setAdminError("");
-                  window.location.hash = "/admin";
-                  return;
-                }
-                setAdminError("Usuario o contraseña incorrectos");
-              }}
-            >
-              <label className="field">
-                <span className="field-label">Usuario</span>
-                <input
-                  className="control"
-                  value={adminCreds.user}
-                  onChange={(e) => setAdminCreds({ ...adminCreds, user: e.target.value })}
-                  placeholder="admin"
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">Contraseña</span>
-                <input
-                  className="control"
-                  type="password"
-                  value={adminCreds.password}
-                  onChange={(e) => setAdminCreds({ ...adminCreds, password: e.target.value })}
-                  placeholder="••••••••"
-                />
-              </label>
-              {adminError ? <p className="muted" style={{ color: "#b91c1c" }}>{adminError}</p> : null}
-              <button type="submit" className="primary-button">
-                Entrar al panel admin
-              </button>
-            </form>
-          </div>
-        )}
 
         <div className="panel grid-form">
           <label className="field">
@@ -156,6 +95,10 @@ export function EmployeePage({ initialWorker = "", lockWorker = false }) {
         {!isReady ? (
           <div className="panel">
             <p className="notice">Selecciona empleado y fecha.</p>
+          </div>
+        ) : loading ? (
+          <div className="panel">
+            <p className="muted">Cargando citas...</p>
           </div>
         ) : (
           <>
