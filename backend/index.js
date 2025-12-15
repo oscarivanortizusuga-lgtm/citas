@@ -4,16 +4,25 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const {
   initDb,
-  getAllAppointments,
+  getDbInfo,
+  getBusinessBySlug,
+  listServices,
+  createService,
+  updateService,
+  deleteService,
+  listWorkers,
+  createWorker,
+  updateWorker,
+  deleteWorker,
+  getUserByBusinessAndUsername,
+  listUsers,
+  createUser,
+  updateUserPassword,
+  setUserActive,
+  listAppointments,
   createAppointment,
   updateAppointment: updateAppointmentDb,
   hasConflict,
-  getUserByUsername,
-  createUser,
-  listUsers,
-  updateUserPassword,
-  setUserActive,
-  getDbInfo,
 } = require("./db");
 
 const app = express();
@@ -59,21 +68,6 @@ function requireRole(role) {
   };
 }
 
-const services = [
-  { id: 1, name: "Manos o pies normal", duration: 30 },
-  { id: 2, name: "Pies y manos normal", duration: 60 },
-  { id: 3, name: "Cejas", duration: 60 },
-  { id: 4, name: "Pestañas", duration: 60 },
-  { id: 5, name: "Uñas semipermanentes", duration: 90 },
-];
-
-const workers = [
-  { id: 1, name: "Ana" },
-  { id: 2, name: "Luis" },
-  { id: 3, name: "Carla" },
-  { id: 4, name: "Mario" },
-];
-
 app.get("/", (_req, res) => {
   res.send("API OK");
 });
@@ -83,21 +77,17 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, ...info });
 });
 
-app.get("/api/services", (_req, res) => {
-  res.json(services);
-});
-
-app.get("/api/workers", (_req, res) => {
-  res.json(workers);
-});
-
+// Auth
 app.post("/api/auth/login", async (req, res) => {
-  const { username, password } = req.body || {};
-  if (!username || !password) {
-    return res.status(400).json({ message: "Faltan credenciales" });
+  const { slug, username, password } = req.body || {};
+  if (!slug || !username || !password) {
+    return res.status(400).json({ message: "Faltan slug/usuario/contraseña" });
   }
 
-  const user = await getUserByUsername(username);
+  const biz = await getBusinessBySlug(slug);
+  if (!biz) return res.status(404).json({ message: "Negocio no encontrado" });
+
+  const user = await getUserByBusinessAndUsername(biz.id, username);
   if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
     return res.status(401).json({ message: "Credenciales inválidas" });
   }
@@ -106,22 +96,82 @@ app.post("/api/auth/login", async (req, res) => {
     username: user.username,
     role: user.role,
     workerName: user.workerName ?? null,
+    businessId: biz.id,
+    businessSlug: biz.slug,
   };
   const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
   res.json({ token, user: payload });
 });
 
 app.get("/api/auth/me", authRequired, (req, res) => {
-  res.json({
-    username: req.user.username,
-    role: req.user.role,
-    workerName: req.user.workerName ?? null,
-  });
+  const { username, role, workerName, businessId, businessSlug } = req.user || {};
+  res.json({ username, role, workerName, businessId, businessSlug });
 });
 
+// Público por negocio
+app.get("/api/public/:slug/services", async (req, res) => {
+  const { slug } = req.params;
+  const biz = await getBusinessBySlug(slug);
+  if (!biz) return res.status(404).json({ message: "Negocio no encontrado" });
+  const svcs = await listServices(biz.id, { activeOnly: true });
+  res.json(svcs.map((s) => ({ id: s.id, name: s.name, duration: s.durationMinutes })));
+});
+
+app.get("/api/public/:slug/workers", async (req, res) => {
+  const { slug } = req.params;
+  const biz = await getBusinessBySlug(slug);
+  if (!biz) return res.status(404).json({ message: "Negocio no encontrado" });
+  const wk = await listWorkers(biz.id, { activeOnly: true });
+  res.json(wk.map((w) => ({ id: w.id, name: w.name })));
+});
+
+app.post("/api/public/:slug/appointments", async (req, res) => {
+  const { slug } = req.params;
+  const { serviceId, date, time } = req.body || {};
+  if (!serviceId || !date || !time) {
+    return res.status(400).json({ message: "Faltan datos obligatorios" });
+  }
+  const biz = await getBusinessBySlug(slug);
+  if (!biz) return res.status(404).json({ message: "Negocio no encontrado" });
+
+  const servicesBiz = await listServices(biz.id, { activeOnly: true });
+  const svc = servicesBiz.find((s) => s.id === serviceId);
+  if (!svc) {
+    return res.status(400).json({ message: "Servicio inválido" });
+  }
+
+  const workersBiz = await listWorkers(biz.id, { activeOnly: true });
+  let selectedWorker = null;
+  for (const w of workersBiz) {
+    const conflict = await hasConflict(biz.id, { workerId: w.id, date, time });
+    if (!conflict) {
+      selectedWorker = w;
+      break;
+    }
+  }
+  if (!selectedWorker) {
+    return res.status(409).json({ message: "No hay disponibilidad" });
+  }
+
+  const created = await createAppointment(biz.id, {
+    serviceId: svc.id,
+    serviceName: svc.name,
+    serviceDuration: svc.durationMinutes,
+    date,
+    time,
+    workerId: selectedWorker.id,
+    worker: selectedWorker.name,
+    status: "pendiente",
+  });
+
+  res.status(201).json(created);
+});
+
+// Citas protegidas
 app.get("/api/appointments", authRequired, async (req, res) => {
   try {
-    const all = await getAllAppointments();
+    const bizId = req.user.businessId;
+    const all = await listAppointments(bizId);
     if (req.user.role === "admin") {
       return res.json(all);
     }
@@ -139,15 +189,16 @@ app.get("/api/appointments", authRequired, async (req, res) => {
   }
 });
 
-app.post("/api/appointments", async (req, res) => {
-  const { serviceName, serviceDuration, date, time, worker, status } = req.body || {};
+app.post("/api/appointments", authRequired, async (req, res) => {
+  const { serviceId, serviceName, serviceDuration, date, time, workerId, worker, status } =
+    req.body || {};
 
   if (!serviceName || !serviceDuration || !date || !time) {
     return res.status(400).json({ error: "Faltan datos obligatorios" });
   }
 
   try {
-    if (await hasConflict({ worker, date, time })) {
+    if (await hasConflict(req.user.businessId, { workerId, workerName: worker, date, time })) {
       return res
         .status(400)
         .json({ message: "Conflicto: el trabajador ya tiene una cita en ese horario" });
@@ -155,15 +206,18 @@ app.post("/api/appointments", async (req, res) => {
 
     const toInsert = {
       id: Date.now().toString(),
+      serviceId: serviceId ?? null,
       serviceName,
       serviceDuration,
       date,
       time,
+      workerId: workerId ?? null,
       worker: worker ?? null,
       status: status ?? "pendiente",
     };
 
     console.log("INSERT appointment", {
+      business_id: req.user.businessId,
       service_name: toInsert.serviceName,
       date: toInsert.date,
       time: toInsert.time,
@@ -171,7 +225,7 @@ app.post("/api/appointments", async (req, res) => {
       status: toInsert.status,
     });
 
-    const created = await createAppointment(toInsert);
+    const created = await createAppointment(req.user.businessId, toInsert);
     console.log("INSERT OK", created.id);
     res.status(201).json(created);
   } catch (err) {
@@ -183,7 +237,7 @@ app.post("/api/appointments", async (req, res) => {
 app.put("/api/appointments/:id", authRequired, requireRole("admin"), async (req, res) => {
   const { id } = req.params;
   try {
-    const updated = await updateAppointmentDb(id, req.body || {});
+    const updated = await updateAppointmentDb(req.user.businessId, id, req.body || {});
     if (!updated) {
       return res.status(404).json({ message: "Appointment not found" });
     }
@@ -194,10 +248,98 @@ app.put("/api/appointments/:id", authRequired, requireRole("admin"), async (req,
   }
 });
 
-// Admin: list users
-app.get("/api/admin/users", authRequired, requireRole("admin"), async (_req, res) => {
+// Admin: Servicios
+app.get("/api/admin/services", authRequired, requireRole("admin"), async (req, res) => {
   try {
-    const users = await listUsers();
+    const items = await listServices(req.user.businessId, { activeOnly: false });
+    res.json(items);
+  } catch (err) {
+    console.error("GET /api/admin/services error", err);
+    res.status(500).json({ message: "Error al obtener servicios" });
+  }
+});
+
+app.post("/api/admin/services", authRequired, requireRole("admin"), async (req, res) => {
+  const { name, durationMinutes } = req.body || {};
+  if (!name || !durationMinutes) {
+    return res.status(400).json({ message: "Faltan datos" });
+  }
+  try {
+    const created = await createService(req.user.businessId, { name, durationMinutes });
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("POST /api/admin/services error", err);
+    res.status(500).json({ message: "Error al crear servicio", details: err.message });
+  }
+});
+
+app.put("/api/admin/services/:id", authRequired, requireRole("admin"), async (req, res) => {
+  try {
+    const updated = await updateService(req.user.businessId, req.params.id, req.body || {});
+    res.json(updated);
+  } catch (err) {
+    console.error("PUT /api/admin/services/:id error", err);
+    res.status(500).json({ message: "Error al actualizar servicio", details: err.message });
+  }
+});
+
+app.delete("/api/admin/services/:id", authRequired, requireRole("admin"), async (req, res) => {
+  try {
+    const updated = await deleteService(req.user.businessId, req.params.id);
+    res.json(updated);
+  } catch (err) {
+    console.error("DELETE /api/admin/services/:id error", err);
+    res.status(500).json({ message: "Error al eliminar servicio", details: err.message });
+  }
+});
+
+// Admin: Workers
+app.get("/api/admin/workers", authRequired, requireRole("admin"), async (req, res) => {
+  try {
+    const items = await listWorkers(req.user.businessId, { activeOnly: false });
+    res.json(items);
+  } catch (err) {
+    console.error("GET /api/admin/workers error", err);
+    res.status(500).json({ message: "Error al obtener trabajadores" });
+  }
+});
+
+app.post("/api/admin/workers", authRequired, requireRole("admin"), async (req, res) => {
+  const { name } = req.body || {};
+  if (!name) return res.status(400).json({ message: "Nombre requerido" });
+  try {
+    const created = await createWorker(req.user.businessId, { name });
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("POST /api/admin/workers error", err);
+    res.status(500).json({ message: "Error al crear trabajador", details: err.message });
+  }
+});
+
+app.put("/api/admin/workers/:id", authRequired, requireRole("admin"), async (req, res) => {
+  try {
+    const updated = await updateWorker(req.user.businessId, req.params.id, req.body || {});
+    res.json(updated);
+  } catch (err) {
+    console.error("PUT /api/admin/workers/:id error", err);
+    res.status(500).json({ message: "Error al actualizar trabajador", details: err.message });
+  }
+});
+
+app.delete("/api/admin/workers/:id", authRequired, requireRole("admin"), async (req, res) => {
+  try {
+    const updated = await deleteWorker(req.user.businessId, req.params.id);
+    res.json(updated);
+  } catch (err) {
+    console.error("DELETE /api/admin/workers/:id error", err);
+    res.status(500).json({ message: "Error al eliminar trabajador", details: err.message });
+  }
+});
+
+// Admin: Users
+app.get("/api/admin/users", authRequired, requireRole("admin"), async (req, res) => {
+  try {
+    const users = await listUsers(req.user.businessId);
     res.json(users);
   } catch (err) {
     console.error("GET /api/admin/users error", err);
@@ -205,7 +347,6 @@ app.get("/api/admin/users", authRequired, requireRole("admin"), async (_req, res
   }
 });
 
-// Admin: create user
 app.post("/api/admin/users", authRequired, requireRole("admin"), async (req, res) => {
   const { username, password, role, workerName } = req.body || {};
   if (!username || !password || !role) {
@@ -219,12 +360,7 @@ app.post("/api/admin/users", authRequired, requireRole("admin"), async (req, res
   }
 
   try {
-    const existing = await getUserByUsername(username);
-    if (existing) {
-      return res.status(409).json({ message: "El usuario ya existe" });
-    }
-
-    const created = await createUser({ username, password, role, workerName });
+    const created = await createUser(req.user.businessId, { username, password, role, workerName });
     res.status(201).json(created);
   } catch (err) {
     console.error("POST /api/admin/users error", err);
@@ -232,7 +368,6 @@ app.post("/api/admin/users", authRequired, requireRole("admin"), async (req, res
   }
 });
 
-// Admin: change password
 app.put("/api/admin/users/:username/password", authRequired, requireRole("admin"), async (req, res) => {
   const { username } = req.params;
   const { newPassword } = req.body || {};
@@ -240,12 +375,8 @@ app.put("/api/admin/users/:username/password", authRequired, requireRole("admin"
     return res.status(400).json({ message: "Nueva contraseña requerida" });
   }
   try {
-    const target = await getUserByUsername(username);
-    if (!target) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
     const passwordHash = bcrypt.hashSync(newPassword, 10);
-    await updateUserPassword(username, passwordHash);
+    await updateUserPassword(req.user.businessId, username, passwordHash);
     res.json({ ok: true });
   } catch (err) {
     console.error("PUT /api/admin/users/:username/password error", err);
@@ -253,19 +384,14 @@ app.put("/api/admin/users/:username/password", authRequired, requireRole("admin"
   }
 });
 
-// Admin: set active (optional)
 app.put("/api/admin/users/:username/active", authRequired, requireRole("admin"), async (req, res) => {
   const { username } = req.params;
   const { active } = req.body || {};
-  if (active !== 0 && active !== 1) {
-    return res.status(400).json({ message: "active debe ser 0 o 1" });
+  if (active !== 0 && active !== 1 && active !== true && active !== false) {
+    return res.status(400).json({ message: "active debe ser 0/1 o boolean" });
   }
   try {
-    const target = await getUserByUsername(username);
-    if (!target) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
-    await setUserActive(username, active);
+    await setUserActive(req.user.businessId, username, active);
     res.json({ ok: true });
   } catch (err) {
     console.error("PUT /api/admin/users/:username/active error", err);
