@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useAppointments } from "./context/AppointmentsContext";
 import { useAuth } from "./context/AuthContext";
 
-const workers = ["Ana", "Luis", "Carla", "Mario"];
-
 function generateTimeSlots() {
   const times = [];
   let hour = 9;
@@ -28,7 +26,7 @@ const timeSlots = generateTimeSlots();
 
 export function EmployeePage({ initialWorker = "", lockWorker = false }) {
   const { appointments, updateAppointment, loading } = useAppointments();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [selectedWorker, setSelectedWorker] = useState(initialWorker);
   const [selectedDate, setSelectedDate] = useState("");
   const [statusError, setStatusError] = useState("");
@@ -70,15 +68,13 @@ export function EmployeePage({ initialWorker = "", lockWorker = false }) {
             <select
               className="control"
               value={selectedWorker}
-              onChange={(e) => setSelectedWorker(e.target.value)}
+                onChange={(e) => setSelectedWorker(e.target.value)}
               disabled={lockWorker}
             >
               <option value="">Selecciona empleado</option>
-              {workers.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
+              {user?.workerName ? (
+                <option value={user.workerName}>{user.workerName}</option>
+              ) : null}
             </select>
           </label>
           <label className="field">
@@ -143,18 +139,18 @@ export function EmployeePage({ initialWorker = "", lockWorker = false }) {
                           {appt.status}
                         </span>
                         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                          <button
-                            type="button"
-                            className="primary-button"
-                            onClick={async () => {
-                              try {
-                                setStatusError("");
+                        <button
+                          type="button"
+                          className="primary-button"
+                          onClick={async () => {
+                            try {
+                              setStatusError("");
                                 await updateAppointment(appt.id, { status: "confirmada" });
-                              } catch (err) {
-                                console.error(err);
-                                setStatusError("No se pudo actualizar el estado.");
-                              }
-                            }}
+                            } catch (err) {
+                              console.error(err);
+                              setStatusError("No se pudo actualizar el estado.");
+                            }
+                          }}
                           >
                             Completar
                           </button>

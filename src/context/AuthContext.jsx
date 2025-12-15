@@ -3,10 +3,12 @@ import { API_BASE_URL } from "../config";
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = "auth_token";
+const SLUG_KEY = "business_slug";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
+  const [businessSlug, setBusinessSlug] = useState(() => localStorage.getItem(SLUG_KEY));
   const [loading, setLoading] = useState(!!token);
 
   const logout = useCallback(() => {
@@ -36,6 +38,10 @@ export function AuthProvider({ children }) {
         setUser(data);
         setToken(currentToken);
         localStorage.setItem(TOKEN_KEY, currentToken);
+        if (data?.businessSlug) {
+          setBusinessSlug(data.businessSlug);
+          localStorage.setItem(SLUG_KEY, data.businessSlug);
+        }
         return data;
       } catch (err) {
         logout();
@@ -48,13 +54,13 @@ export function AuthProvider({ children }) {
   );
 
   const login = useCallback(
-    async (username, password) => {
+    async (slug, username, password) => {
       setLoading(true);
       try {
         const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ slug, username, password }),
         });
         if (!res.ok) {
           let message = "Credenciales inválidas";
@@ -71,6 +77,10 @@ export function AuthProvider({ children }) {
         if (newToken) {
           localStorage.setItem(TOKEN_KEY, newToken);
           setToken(newToken);
+        }
+        if (data?.user?.businessSlug) {
+          setBusinessSlug(data.user.businessSlug);
+          localStorage.setItem(SLUG_KEY, data.user.businessSlug);
         }
         setUser(data?.user || null);
         return data;
@@ -98,6 +108,7 @@ export function AuthProvider({ children }) {
     login,
     logout,
     refreshMe,
+    businessSlug,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

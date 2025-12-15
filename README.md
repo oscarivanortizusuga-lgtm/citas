@@ -1,51 +1,53 @@
-# Citas Web (React + Vite + Node/Express/SQLite)
+# Citas Web (multi-negocio)
 
-Agenda de citas con roles (cliente, admin, empleado) y autenticación JWT.
+React + Vite (frontend) y Node/Express + Postgres (Supabase/pg) con JWT. Multi-tenant por `slug`.
 
-## Backend (Express + SQLite)
+## Rutas del frontend
+- Cliente (público): `/b/:slug`
+- Admin: `/b/:slug/admin`
+- Empleado: `/b/:slug/empleado`
+- Root redirige a `/b/magicbeautycol`.
 
-- Base de datos: `backend/database.sqlite` (better-sqlite3).
-- JWT: lee `process.env.JWT_SECRET` con fallback `dev_secret_change_me`. Define un secreto fuerte en producción.
-- Endpoints:
-  - Público: `POST /api/appointments`, `GET /api/services`, `GET /api/workers`
-  - Autenticados (JWT Bearer): `POST /api/auth/login`, `GET /api/auth/me`, `GET /api/appointments`, `PUT /api/appointments/:id` (solo admin)
-  - Filtrado para empleados: `GET /api/appointments` devuelve solo sus citas según `workerName` en el token.
+## Backend (principales)
+- Auth:
+  - `POST /api/auth/login` body `{ slug, username, password }` → token con `businessId`, `businessSlug`, `role`, `workerName`.
+  - `GET /api/auth/me` (Bearer).
+- Público por negocio:
+  - `GET /api/public/:slug/services`
+  - `GET /api/public/:slug/workers`
+  - `POST /api/public/:slug/appointments` body `{ serviceId, date, time }` (asigna worker libre o 409 si no hay disponibilidad).
+- Admin/empleado (requiere Bearer, usa `businessId` del token):
+  - Citas: `GET /api/appointments` (admin ve todas, employee solo las suyas), `PUT /api/appointments/:id` (admin).
+  - Servicios: `GET/POST/PUT/DELETE /api/admin/services`
+  - Trabajadores: `GET/POST/PUT/DELETE /api/admin/workers`
+  - Usuarios: `GET/POST/PUT /api/admin/users`, `PUT /api/admin/users/:username/password`, `PUT /api/admin/users/:username/active`
 
-### Usuarios de prueba (seed)
+## Multi-negocio
+- El `slug` viene en la URL; el token incluye `businessId`/`businessSlug`.
+- Para crear un nuevo negocio:
+  - Opción rápida: insertar en DB (tabla `businesses`) y seed de servicios/trabajadores/usuarios vía SQL o script (a falta de endpoint global).
+  - Slug debe ser único y se usa en `/b/:slug`.
+
+## Datos seed por defecto (business: magicbeautycol)
 - Admin: `admin / admin123`
 - Empleados: `ana / ana123`, `luis / luis123`, `carla / carla123`, `mario / mario123`
+- Servicios: Manos o pies normal (30), Pies y manos normal (60), Cejas (60), Pestanas (60), Unas semipermanentes (90)
+- Trabajadores: Ana, Luis, Carla, Mario
 
-### Variables de entorno
-- `JWT_SECRET` (obligatoria en prod). En Render: Config Vars -> key `JWT_SECRET`, value un string seguro.
+## Variables de entorno
+- Render (backend):
+  - `DATABASE_URL` (usa el pooler de Supabase con `sslmode=require`)
+  - `JWT_SECRET` (valor fuerte)
+- Netlify (frontend):
+  - `VITE_API_BASE_URL` apuntando al backend (ej. `https://tu-backend.onrender.com`)
 
-### Ejecutar backend local
-```bash
-cd backend
-JWT_SECRET=dev_secret_change_me node index.js
-```
+## Despliegue frontend (Netlify)
+- `npm run build` (publish: `dist`)
+- Probar:
+  - Cliente: `https://tu-site.netlify.app/b/magicbeautycol`
+  - Admin: `https://tu-site.netlify.app/b/magicbeautycol/admin`
+  - Empleado: `https://tu-site.netlify.app/b/magicbeautycol/empleado`
 
-## Frontend (React + Vite)
-
-- Base API configurada en `src/config.js` usando `VITE_API_BASE_URL`.
-- AuthContext guarda el token en `localStorage` (`auth_token`) y llama `GET /api/auth/me` al cargar.
-- AppointmentsContext usa el token para `GET /api/appointments` y `PUT /api/appointments/:id`; el `POST /api/appointments` sigue público.
-- Rutas por hash:
-  - Cliente: `/#/` (o sin hash)
-  - Admin: `/#/admin` (requiere login admin)
-  - Empleado: `/#/empleado` (requiere login empleado; si el token tiene `workerName`, fija el empleado)
-
-### Variables de entorno frontend
-- `VITE_API_BASE_URL` apuntando al backend (ej. `https://tu-backend.onrender.com`).
-
-### Despliegue en Netlify (solo frontend)
-1) Configura `VITE_API_BASE_URL` en Netlify apuntando a tu backend público.
-2) Build command: `npm run build` (en raíz).
-3) Publish directory: `dist`.
-4) Probar:
-   - Cliente: `https://tu-site.netlify.app/`
-   - Admin: `https://tu-site.netlify.app/#/admin` (usa usuarios de prueba).
-   - Empleado: `https://tu-site.netlify.app/#/empleado` (se filtra según token; el backend aplica rol/worker).
-
-## Notas de seguridad
-- No hardcodes secrets en el frontend. Solo usa `VITE_API_BASE_URL`.
-- Define `JWT_SECRET` solo en el backend (Render u host elegido).
+## Notas
+- No expongas secretos en el frontend; solo `VITE_API_BASE_URL`.
+- JWT solo en backend (`JWT_SECRET`).***

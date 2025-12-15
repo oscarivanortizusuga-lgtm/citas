@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "../config";
 import { useAuth } from "./AuthContext";
+import { useBusiness } from "./BusinessContext";
 
 const AppointmentsContext = createContext(null);
 
@@ -9,6 +10,7 @@ export function AppointmentsProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const { token, logout } = useAuth();
+  const { businessSlug } = useBusiness();
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -45,7 +47,7 @@ export function AppointmentsProvider({ children }) {
 
   const addAppointment = async (appointmentData) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/appointments`, {
+      const res = await fetch(`${API_BASE_URL}/api/public/${businessSlug}/appointments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(appointmentData),

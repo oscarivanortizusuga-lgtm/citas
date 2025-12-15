@@ -1,12 +1,26 @@
 import React, { useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams } from "react-router-dom";
 import { ServiceSelector } from "./components/ServiceSelector";
 import { DateSelector } from "./components/DateSelector";
 import { TimeSelector } from "./components/TimeSelector";
 import { Confirmation } from "./components/Confirmation";
 import { useAppointments } from "./context/AppointmentsContext";
+import { AdminPage } from "./AdminPage";
+import { EmployeePage } from "./EmployeePage";
+import { BusinessProvider } from "./context/BusinessContext";
+import { useAuth } from "./context/AuthContext";
+import { LoginForm } from "./components/LoginForm";
 import "./App.css";
 
-function App() {
+function BusinessLayout() {
+  return (
+    <BusinessProvider>
+      <Outlet />
+    </BusinessProvider>
+  );
+}
+
+function ClientPage() {
   const [selectedService, setSelectedService] = useState(null);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
@@ -81,4 +95,50 @@ function App() {
   );
 }
 
-export default App;
+function AdminRoute() {
+  const { user, loading } = useAuth();
+  const { slug } = useParams();
+  if (loading) return <p className="muted">Verificando sesión...</p>;
+  if (!user || user.role !== "admin" || user.businessSlug !== slug) {
+    return (
+      <div className="page">
+        <div className="app-shell">
+          <LoginForm title="Acceso admin" />
+        </div>
+      </div>
+    );
+  }
+  return <AdminPage />;
+}
+
+function EmployeeRoute() {
+  const { user, loading } = useAuth();
+  const { slug } = useParams();
+  if (loading) return <p className="muted">Verificando sesión...</p>;
+  if (!user || user.role !== "employee" || user.businessSlug !== slug) {
+    return (
+      <div className="page">
+        <div className="app-shell">
+          <LoginForm title="Acceso empleado" />
+        </div>
+      </div>
+    );
+  }
+  return <EmployeePage />;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/b/magicbeautycol" replace />} />
+        <Route path="/b/:slug" element={<BusinessLayout />}>
+          <Route index element={<ClientPage />} />
+          <Route path="admin" element={<AdminRoute />} />
+          <Route path="empleado" element={<EmployeeRoute />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/b/magicbeautycol" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}

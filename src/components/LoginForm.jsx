@@ -1,16 +1,22 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useBusiness } from "../context/BusinessContext";
 
 export function LoginForm({ title = "Iniciar sesión", onSuccess }) {
-  const { login, loading } = useAuth();
-  const [form, setForm] = useState({ username: "", password: "" });
+  const { login, loading, businessSlug: savedSlug } = useAuth();
+  const { businessSlug: urlSlug } = useBusiness();
+  const [form, setForm] = useState({
+    slug: urlSlug || savedSlug || "magicbeautycol",
+    username: "",
+    password: "",
+  });
   const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     try {
-      await login(form.username, form.password);
+      await login(form.slug, form.username, form.password);
       if (onSuccess) onSuccess();
     } catch (err) {
       setError(err?.message || "Credenciales inválidas");
@@ -24,6 +30,15 @@ export function LoginForm({ title = "Iniciar sesión", onSuccess }) {
         <p className="helper">Acceso requerido para ver esta sección.</p>
       </div>
       <form onSubmit={handleSubmit} className="stack">
+        <label className="field">
+          <span className="field-label">Negocio (slug)</span>
+          <input
+            className="control"
+            value={form.slug}
+            onChange={(e) => setForm({ ...form, slug: e.target.value })}
+            placeholder="magicbeautycol"
+          />
+        </label>
         <label className="field">
           <span className="field-label">Usuario</span>
           <input

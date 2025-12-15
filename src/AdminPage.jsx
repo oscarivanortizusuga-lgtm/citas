@@ -1,51 +1,52 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAppointments } from "./context/AppointmentsContext";
 import { API_BASE_URL } from "./config";
-import { UserManagement } from "./components/UserManagement";
+import { useAuth } from "./context/AuthContext";
+import { ServicesManager } from "./components/ServicesManager";
+import { WorkersManager } from "./components/WorkersManager";
+import { UsersManager } from "./components/UsersManager";
 
-const FALLBACK_WORKERS = ["Ana", "Luis", "Carla", "Mario"];
-
-export function AdminPage({ onLogout, users = [], onCreateUser }) {
+export function AdminPage({ onLogout }) {
   const { appointments, updateAppointment } = useAppointments();
+  const { token, logout } = useAuth();
   const [showPendingOnly, setShowPendingOnly] = useState(false);
-  const [newUser, setNewUser] = useState({ username: "", role: "employee", password: "" });
-  const [creationError, setCreationError] = useState("");
-  const [creationOk, setCreationOk] = useState("");
   const [assignError, setAssignError] = useState("");
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [workers, setWorkers] = useState(FALLBACK_WORKERS);
+  const [workers, setWorkers] = useState([]);
   const [workersLoading, setWorkersLoading] = useState(true);
   const [workersError, setWorkersError] = useState(false);
-  const [adminView, setAdminView] = useState("appointments"); // "appointments" | "users"
+  const [adminView, setAdminView] = useState("appointments"); // appointments | services | workers | users
+
+  const authHeaders = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : {}), [token]);
 
   useEffect(() => {
     const fetchWorkers = async () => {
       try {
         setWorkersLoading(true);
         setWorkersError(false);
-        console.log("API_BASE_URL (workers) =", API_BASE_URL);
-        const res = await fetch(`${API_BASE_URL}/api/workers`);
+        const res = await fetch(`${API_BASE_URL}/api/admin/workers`, { headers: authHeaders });
+        if (res.status === 401) {
+          logout();
+          return;
+        }
         if (!res.ok) throw new Error("Network response was not ok");
         const data = await res.json();
         const normalized =
           Array.isArray(data) && data.length > 0
-            ? data
-                .map((w) => (typeof w === "string" ? w : w?.name))
-                .filter(Boolean)
-            : FALLBACK_WORKERS;
-        setWorkers(normalized.length > 0 ? normalized : FALLBACK_WORKERS);
+            ? data.map((w) => w.name).filter(Boolean)
+            : [];
+        setWorkers(normalized);
       } catch (err) {
         console.error(err);
         setWorkersError(true);
-        setWorkers(FALLBACK_WORKERS);
+        setWorkers([]);
       } finally {
         setWorkersLoading(false);
       }
     };
 
     fetchWorkers();
-  }, [API_BASE_URL]);
+  }, [API_BASE_URL, authHeaders, logout]);
 
   const toMinutes = (timeStr) => {
     const [h, m] = timeStr.split(":").map(Number);
@@ -129,8 +130,6 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
     ? appointments.filter((appt) => appt.status === "pendiente")
     : appointments;
 
-  const employeesList = users.filter((u) => u.role === "employee");
-
   const generateTimeSlots = () => {
     const slots = [];
     let hour = 9;
@@ -166,21 +165,6 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
     return { worker, appts };
   });
 
-  const handleCreateUser = (e) => {
-    e.preventDefault();
-    if (!onCreateUser) return;
-    const result = onCreateUser(newUser);
-    if (result.ok) {
-      setCreationError("");
-      setCreationOk("Usuario creado correctamente");
-      setNewUser({ username: "", role: "employee", password: "" });
-      setShowCreateModal(false);
-    } else {
-      setCreationOk("");
-      setCreationError(result.error || "No se pudo crear el usuario");
-    }
-  };
-
   return (
     <div className="page">
       <div className="app-shell">
@@ -188,13 +172,10 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
           <div className="section-heading">
             <div>
               <h1 className="page-title">Panel de administración</h1>
-              <p className="lede">Gestiona citas, asigna personal y crea usuarios.</p>
-              <p className="helper">Tema Magic Beauty, estados y duraciones intactos.</p>
+              <p className="lede">Gestiona citas, servicios, trabajadores y usuarios.</p>
+              <p className="helper">Vista multi-negocio.</p>
             </div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button className="primary-button" type="button" onClick={() => setShowCreateModal(true)}>
-                Crear usuario
-              </button>
               {onLogout ? (
                 <button className="ghost-button" onClick={onLogout}>
                   Cerrar sesión
@@ -202,10 +183,12 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
               ) : null}
             </div>
           </div>
-          <div className="stack" style={{ flexDirection: "row", gap: "10px", flexWrap: "wrap" }}>
-            <span className="badge-soft">Total: {totalAppointments}</span>
-            <span className="badge-soft">Pendientes: {pendingCount}</span>
-          </div>
+          {adminView === "appointments" ? (
+            <div className="stack" style={{ flexDirection: "row", gap: "10px", flexWrap: "wrap" }}>
+              <span className="badge-soft">Total: {totalAppointments}</span>
+              <span className="badge-soft">Pendientes: {pendingCount}</span>
+            </div>
+          ) : null}
         </header>
 
         <div className="panel admin-toolbar">
@@ -216,6 +199,20 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
               onClick={() => setAdminView("appointments")}
             >
               Citas
+            </button>
+            <button
+              type="button"
+              className={adminView === "services" ? "primary-button" : "ghost-button"}
+              onClick={() => setAdminView("services")}
+            >
+              Servicios
+            </button>
+            <button
+              type="button"
+              className={adminView === "workers" ? "primary-button" : "ghost-button"}
+              onClick={() => setAdminView("workers")}
+            >
+              Trabajadores
             </button>
             <button
               type="button"
@@ -238,8 +235,12 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
           ) : null}
         </div>
 
-        {adminView === "users" ? (
-          <UserManagement />
+        {adminView === "services" ? (
+          <ServicesManager />
+        ) : adminView === "workers" ? (
+          <WorkersManager />
+        ) : adminView === "users" ? (
+          <UsersManager />
         ) : (
           <>
             {assignError ? (
@@ -247,66 +248,6 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
                 <p className="notice" style={{ color: "#7f1d1d", borderColor: "#fca5a5", background: "#fef2f2" }}>
                   {assignError}
                 </p>
-              </div>
-            ) : null}
-
-            {showCreateModal ? (
-              <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
-                <div className="modal" onClick={(e) => e.stopPropagation()}>
-                  <div className="section-heading">
-                    <div>
-                      <h3 style={{ margin: 0 }}>Crear usuario</h3>
-                      <p className="helper">Admin requiere contraseña; empleados solo usuario.</p>
-                    </div>
-                    <button className="ghost-button" type="button" onClick={() => setShowCreateModal(false)}>
-                      Cerrar
-                    </button>
-                  </div>
-                  <form onSubmit={handleCreateUser} className="stack">
-                    <label className="field">
-                      <span className="field-label">Usuario</span>
-                      <input
-                        className="control"
-                        value={newUser.username}
-                        onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                        placeholder="ej. ana"
-                      />
-                    </label>
-                    <label className="field">
-                      <span className="field-label">Rol</span>
-                      <select
-                        className="control"
-                        value={newUser.role}
-                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                      >
-                        <option value="employee">Empleado</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </label>
-                    {newUser.role === "admin" ? (
-                      <label className="field">
-                        <span className="field-label">Contraseña (solo admin)</span>
-                        <input
-                          className="control"
-                          type="password"
-                          value={newUser.password}
-                          onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                          placeholder="••••••••"
-                        />
-                      </label>
-                    ) : null}
-                    {creationError ? <p className="muted" style={{ color: "#b91c1c" }}>{creationError}</p> : null}
-                    {creationOk ? <p className="muted" style={{ color: "#15803d" }}>{creationOk}</p> : null}
-                    <div className="admin-actions" style={{ justifyContent: "flex-start", gap: "8px" }}>
-                      <button type="submit" className="primary-button">
-                        Guardar
-                      </button>
-                      <button type="button" className="ghost-button" onClick={() => setShowCreateModal(false)}>
-                        Cancelar
-                      </button>
-                    </div>
-                  </form>
-                </div>
               </div>
             ) : null}
 
@@ -350,12 +291,12 @@ export function AdminPage({ onLogout, users = [], onCreateUser }) {
                       <div className="muted" style={{ fontWeight: 700 }}>Trabajador</div>
                       <select
                         disabled={workersLoading}
-                        value={appt.worker ?? ""}
-                        onChange={(e) =>
-                          handleWorkerChange(appt.id, e.target.value || null)
-                        }
-                        className="control"
-                      >
+                    value={appt.worker ?? ""}
+                    onChange={(e) =>
+                      handleWorkerChange(appt.id, e.target.value || null)
+                    }
+                    className="control"
+                  >
                         <option value="">Sin asignar</option>
                         {workers.map((w) => (
                           <option key={w} value={w}>

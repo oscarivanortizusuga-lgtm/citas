@@ -2,13 +2,12 @@ import React, { useEffect, useState } from "react";
 import { API_BASE_URL } from "../config";
 import { useAuth } from "../context/AuthContext";
 
-export function UserManagement() {
+export function UsersManager() {
   const { token, logout } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
   const [createForm, setCreateForm] = useState({
     username: "",
     password: "",
@@ -16,18 +15,12 @@ export function UserManagement() {
     workerName: "",
   });
   const [createLoading, setCreateLoading] = useState(false);
-
   const [pwdEdit, setPwdEdit] = useState(null); // { username, newPassword }
   const [pwdLoading, setPwdLoading] = useState(false);
 
   const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
 
-  const fetchUsers = async () => {
-    if (!token) {
-      setError("No autorizado");
-      setLoading(false);
-      return;
-    }
+  const loadUsers = async () => {
     try {
       setLoading(true);
       setError("");
@@ -37,8 +30,7 @@ export function UserManagement() {
           ...authHeaders,
         },
       });
-      if (res.status === 401 || res.status === 403) {
-        setError("No autorizado");
+      if (res.status === 401) {
         logout();
         return;
       }
@@ -53,7 +45,7 @@ export function UserManagement() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -84,8 +76,7 @@ export function UserManagement() {
         },
         body: JSON.stringify(createForm),
       });
-      if (res.status === 401 || res.status === 403) {
-        setError("No autorizado");
+      if (res.status === 401) {
         logout();
         return;
       }
@@ -97,7 +88,7 @@ export function UserManagement() {
         const errText = await res.text();
         throw new Error(errText || "Error al crear usuario");
       }
-      await fetchUsers();
+      await loadUsers();
       setSuccess("Usuario creado");
       setCreateForm({ username: "", password: "", role: "employee", workerName: "" });
     } catch (err) {
@@ -125,8 +116,7 @@ export function UserManagement() {
         },
         body: JSON.stringify({ newPassword: pwdEdit.newPassword }),
       });
-      if (res.status === 401 || res.status === 403) {
-        setError("No autorizado");
+      if (res.status === 401) {
         logout();
         return;
       }
@@ -139,6 +129,24 @@ export function UserManagement() {
       setError(err?.message || "Error al cambiar contraseña");
     } finally {
       setPwdLoading(false);
+    }
+  };
+
+  const handleToggleActive = async (username, active) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/${username}/active`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ active }),
+      });
+      if (res.status === 401) {
+        logout();
+        return;
+      }
+      if (!res.ok) throw new Error("No se pudo actualizar usuario");
+      await loadUsers();
+    } catch (err) {
+      setError(err?.message || "Error al actualizar usuario");
     }
   };
 
@@ -182,13 +190,20 @@ export function UserManagement() {
                       <td>{u.role}</td>
                       <td>{u.workerName || "-"}</td>
                       <td>{u.active ? "Sí" : "No"}</td>
-                      <td>
+                      <td style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                         <button
                           className="ghost-button"
                           type="button"
                           onClick={() => setPwdEdit({ username: u.username, newPassword: "" })}
                         >
                           Cambiar contraseña
+                        </button>
+                        <button
+                          className="ghost-button"
+                          type="button"
+                          onClick={() => handleToggleActive(u.username, !u.active)}
+                        >
+                          {u.active ? "Desactivar" : "Activar"}
                         </button>
                       </td>
                     </tr>
