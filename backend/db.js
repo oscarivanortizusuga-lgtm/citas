@@ -120,9 +120,17 @@ async function ensureSchemas() {
   await runQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS business_id TEXT`);
   await runQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS worker_name TEXT`);
   await runQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN`);
-  await runQuery(
-    `ALTER TABLE users ALTER COLUMN active TYPE BOOLEAN USING (CASE WHEN active IN (1, '1', true, 'true') THEN TRUE ELSE FALSE END)`
-  );
+  await runQuery(`
+    ALTER TABLE users
+    ALTER COLUMN active TYPE BOOLEAN
+    USING (
+      CASE
+        WHEN active IS NULL THEN TRUE
+        WHEN active::text IN ('1','true','t','yes','on') THEN TRUE
+        ELSE FALSE
+      END
+    )
+  `);
   await runQuery(`ALTER TABLE users ALTER COLUMN active SET DEFAULT TRUE`);
   await runQuery(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS business_id TEXT`);
   await runQuery(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS worker_id TEXT REFERENCES workers(id)`);
